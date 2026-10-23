@@ -11,6 +11,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import NotificationBell from "../components/NotificationBell";
 
 const roleLabels = {
   student: "Student",
@@ -62,6 +63,7 @@ export default function Dashboard() {
           </Link>
 
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <Link
               to="/courses"
               className="hidden rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 hover:text-white sm:inline-flex"

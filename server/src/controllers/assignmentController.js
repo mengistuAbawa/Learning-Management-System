@@ -1,5 +1,6 @@
 const { pool } = require("../config/db");
 const { getCourse, ownsCourse, isEnrolled } = require("../services/courseAccess");
+const { notifyAssignmentGraded } = require("../services/notificationService");
 
 const validId = (value) => /^[1-9]\d*$/.test(String(value));
 
@@ -267,7 +268,9 @@ async function gradeSubmission(req, res, next) {
     }
 
     const lookup = await pool.query(
-      `SELECT s.id, a.max_points, a.course_id, c.instructor_id
+      `SELECT s.id, s.student_id, s.grade, s.feedback,
+              a.title, a.max_points,
+              a.course_id, c.instructor_id
        FROM assignment_submissions s
        JOIN assignments a ON a.id = s.assignment_id
        JOIN courses c ON c.id = a.course_id
@@ -297,6 +300,23 @@ async function gradeSubmission(req, res, next) {
                  feedback, graded_by, graded_at, status`,
       [gradeValue, feedback.trim(), req.user.id, submissionId]
     );
+
+    const gradeChanged =
+      submission.grade === null ||
+      submission.grade === undefined ||
+      Number(submission.grade) !== gradeValue ||
+      (submission.feedback || "") !== feedback.trim();
+
+    if (gradeChanged) {
+      await notifyAssignmentGraded({
+        userId: result.rows[0].student_id,
+        assignmentTitle: submission.title,
+        courseId: submission.course_id,
+        submissionId: result.rows[0].id,
+        grade: gradeValue,
+        feedback: feedback.trim(),
+      });
+    }
 
     return res.json({
       success: true,

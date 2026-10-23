@@ -5,6 +5,7 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Courses from "./pages/Courses";
 import CourseAssignments from "./pages/CourseAssignments";
+import Notifications from "./pages/Notifications";
 
 import ProtectedRoute, {
   PageLoader,
@@ -54,6 +55,7 @@ export default function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/notifications" element={<Notifications />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/courses/:courseId/learn" element={<CourseContent />} />
         <Route path="/my-learning" element={<MyLearning />} />
