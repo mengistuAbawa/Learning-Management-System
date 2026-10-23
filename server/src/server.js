@@ -40,6 +40,27 @@ app.use(
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+app.get("/api/health", async (req, res) => {
+  try {
+    const database = await testDatabaseConnection();
+
+    res.status(200).json({
+      success: true,
+      message: "LearnSphere LMS API is running",
+      database: "connected",
+      databaseName: database.database,
+      serverTime: database.server_time,
+    });
+  } catch (error) {
+    console.error("Health check failed:", error.message);
+
+    res.status(503).json({
+      success: false,
+      message: "API is running, but the database is unavailable.",
+    });
+  }
+});
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/auth", authRoutes);
@@ -67,26 +88,6 @@ app.get("/", (req, res) => {
   });
 });
 
-app.get("/api/health", async (req, res) => {
-  try {
-    const database = await testDatabaseConnection();
-
-    res.status(200).json({
-      success: true,
-      message: "LearnSphere LMS API is running",
-      database: "connected",
-      databaseName: database.database,
-      serverTime: database.server_time,
-    });
-  } catch (error) {
-    console.error("Health check failed:", error.message);
-
-    res.status(503).json({
-      success: false,
-      message: "API is running, but the database is unavailable.",
-    });
-  }
-});
 
 // Authentication endpoints
 app.use("/api/auth", authRoutes);
