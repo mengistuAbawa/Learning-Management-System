@@ -1,5 +1,6 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
+  Activity,
   ArrowRight,
   BookOpen,
   CheckCircle2,
@@ -64,6 +65,19 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-3">
             <NotificationBell />
+            <NavLink
+              to="/analytics"
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-xl px-4 py-3 transition ${
+                  isActive
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`
+              }
+            >
+              <Activity size={20} />
+              <span>Analytics</span>
+            </NavLink>
             <Link
               to="/courses"
               className="hidden rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 hover:text-white sm:inline-flex"

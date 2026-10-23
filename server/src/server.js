@@ -13,9 +13,11 @@ const moduleRoutes = require("./routes/moduleRoutes");
 const lessonRoutes = require("./routes/lessonRoutes");
 const enrollmentRoutes = require("./routes/enrollmentRoutes");
 const progressRoutes = require("./routes/progressRoutes");
+const quizRoutes = require("./routes/quizRoutes");
 const assignmentRoutes = require("./routes/assignmentRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
+
 const app = express();
 
 const PORT = Number(process.env.PORT) || 5000;
@@ -63,6 +65,7 @@ app.get("/api/health", async (req, res) => {
     });
   }
 });
+
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/auth", authRoutes);
@@ -71,9 +74,10 @@ app.use("/api", moduleRoutes);
 app.use("/api", lessonRoutes);
 app.use("/api/enrollments", enrollmentRoutes);
 app.use("/api/progress", progressRoutes);
+app.use("/api", quizRoutes);
 app.use("/api", assignmentRoutes);
-app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/analytics", analyticsRoutes);
 app.use(
   "/api",
   rateLimit({
@@ -91,7 +95,6 @@ app.get("/", (req, res) => {
     version: "1.0.0",
   });
 });
-
 
 // Authentication endpoints
 app.use("/api/auth", authRoutes);
