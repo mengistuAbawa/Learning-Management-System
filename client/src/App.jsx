@@ -1,13 +1,17 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import Courses from "./pages/Courses";
+
 import ProtectedRoute, {
+  PageLoader,
   RoleRoute,
 } from "./components/ProtectedRoute";
-import { useAuth } from "./context/AuthContext";
-import { PageLoader } from "./components/ProtectedRoute";
 
+import { useAuth } from "./context/AuthContext";
+import CourseContent from "./pages/CourseContent";
 function HomeRedirect() {
   const { loading, isAuthenticated } = useAuth();
 
@@ -32,12 +36,7 @@ function NotFound() {
         <p className="mt-3 text-slate-400">
           The page you are looking for does not exist.
         </p>
-        <a
-          href="/"
-          className="mt-7 inline-flex rounded-xl bg-indigo-500 px-5 py-3 font-semibold hover:bg-indigo-400"
-        >
-          Return to LearnSphere
-        </a>
+        <Navigate to="/" replace />
       </div>
     </main>
   );
@@ -52,7 +51,8 @@ export default function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
-
+        <Route path="/courses" element={<Courses />} />
+        <Route path="/courses/:courseId/learn" element={<CourseContent />} />
         <Route
           path="/admin"
           element={
@@ -80,6 +80,8 @@ export default function App() {
           }
         />
       </Route>
+      <Route path="/courses" element={<Courses />} />
+<Route path="/courses/:courseId/learn" element={<CourseContent />} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

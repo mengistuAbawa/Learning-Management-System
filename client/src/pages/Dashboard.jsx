@@ -62,6 +62,14 @@ export default function Dashboard() {
           </Link>
 
           <div className="flex items-center gap-3">
+            <Link
+              to="/courses"
+              className="hidden rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 hover:text-white sm:inline-flex"
+            >
+              <BookOpen className="mr-2 h-4 w-4" />
+              Explore courses
+            </Link>
+
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold">{user?.full_name}</p>
               <p className="text-xs capitalize text-slate-400">
