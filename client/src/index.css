@@ -46,3 +46,80 @@ input:focus-visible {
   color: white;
   background: #4f46e5;
 }
+
+@keyframes analytics-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes analytics-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.analytics-enter {
+  animation: analytics-enter 380ms ease-out both;
+}
+
+.grid > .analytics-enter:nth-child(2) {
+  animation-delay: 55ms;
+}
+
+.grid > .analytics-enter:nth-child(3) {
+  animation-delay: 110ms;
+}
+
+.grid > .analytics-enter:nth-child(4) {
+  animation-delay: 165ms;
+}
+
+.grid > .analytics-enter:nth-child(5) {
+  animation-delay: 220ms;
+}
+
+.grid > .analytics-enter:nth-child(6) {
+  animation-delay: 275ms;
+}
+
+.grid > .analytics-enter:nth-child(7) {
+  animation-delay: 330ms;
+}
+
+.grid > .analytics-enter:nth-child(8) {
+  animation-delay: 385ms;
+}
+
+.analytics-donut {
+  transition: stroke-dashoffset 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.analytics-bar-fill {
+  display: block;
+  min-width: 0;
+  transform-origin: left center;
+  animation: analytics-bar-grow 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analytics-enter,
+  .analytics-bar-fill {
+    animation-duration: 1ms;
+    animation-delay: 0ms !important;
+  }
+
+  .analytics-donut {
+    transition-duration: 1ms;
+  }
+}

@@ -145,14 +145,14 @@ before(async () => {
   );
 
   const ownAssignment = await pool.query(
-    `INSERT INTO assignments (course_id, title, description, max_points)
-     VALUES ($1, 'Own Assignment', 'Test assignment.', 10)
+    `INSERT INTO assignments (course_id, title, description, max_points, is_published)
+     VALUES ($1, 'Own Assignment', 'Test assignment.', 10, TRUE)
      RETURNING id`,
     [ownCourseId]
   );
   const otherAssignment = await pool.query(
-    `INSERT INTO assignments (course_id, title, description, max_points)
-     VALUES ($1, 'Other Assignment', 'Test assignment.', 10)
+    `INSERT INTO assignments (course_id, title, description, max_points, is_published)
+     VALUES ($1, 'Other Assignment', 'Test assignment.', 10, TRUE)
      RETURNING id`,
     [otherCourseId]
   );
@@ -244,6 +244,49 @@ test("analytics endpoint enforces authentication and role-scoped data access", a
     assert.equal(result.body.analytics.summary.totalAssignments, 1);
     assert.equal(result.body.analytics.summary.totalSubmissions, 1);
     assert.equal(result.body.analytics.summary.averageGrade, 8);
+  });
+
+  await t.test("instructor student analytics is authenticated and owner-scoped", async () => {
+    const unauthenticated = await request("/analytics/students");
+    assert.equal(unauthenticated.status, 401);
+
+    const result = await request("/analytics/students", {
+      token: instructorToken,
+    });
+    assert.equal(result.status, 200);
+    assert.deepEqual(
+      result.body.students.map((student) => String(student.course_id)),
+      [String(ownCourseId)]
+    );
+    assert.equal(result.body.pagination.total, 1);
+    assert.equal(
+      result.body.students[0].student_name,
+      "Analytics Security student"
+    );
+
+    const otherInstructorCourse = await request(
+      `/analytics/students?courseId=${otherCourseId}`,
+      { token: instructorToken }
+    );
+    assert.equal(otherInstructorCourse.status, 200);
+    assert.equal(otherInstructorCourse.body.pagination.total, 0);
+
+    const invalidPagination = await request(
+      "/analytics/students?pageSize=51",
+      { token: instructorToken }
+    );
+    assert.equal(invalidPagination.status, 400);
+
+    const invalidSort = await request(
+      "/analytics/students?sortBy=student_email%3BDROP",
+      { token: instructorToken }
+    );
+    assert.equal(invalidSort.status, 400);
+
+    const adminResult = await request("/analytics/students", {
+      token: adminToken,
+    });
+    assert.equal(adminResult.status, 403);
   });
 
   await t.test("administrators receive platform-wide summary counts", async () => {
