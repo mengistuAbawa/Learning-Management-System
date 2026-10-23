@@ -77,7 +77,8 @@ CREATE TABLE enrollments (
         ON DELETE RESTRICT,
     status VARCHAR(20) NOT NULL DEFAULT 'active'
         CHECK (status IN ('active', 'completed', 'cancelled')),
-    enrolled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ,
     UNIQUE (student_id, course_id)
 );

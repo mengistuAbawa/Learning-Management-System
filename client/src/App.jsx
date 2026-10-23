@@ -12,6 +12,8 @@ import ProtectedRoute, {
 
 import { useAuth } from "./context/AuthContext";
 import CourseContent from "./pages/CourseContent";
+import MyLearning from "./pages/MyLearning";
+import CourseEnrollments from "./pages/CourseEnrollments";
 function HomeRedirect() {
   const { loading, isAuthenticated } = useAuth();
 
@@ -53,6 +55,8 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/courses/:courseId/learn" element={<CourseContent />} />
+        <Route path="/my-learning" element={<MyLearning />} />
+        <Route path="/courses/:courseId/enrollments" element={<CourseEnrollments />} />
         <Route
           path="/admin"
           element={
@@ -80,8 +84,6 @@ export default function App() {
           }
         />
       </Route>
-      <Route path="/courses" element={<Courses />} />
-<Route path="/courses/:courseId/learn" element={<CourseContent />} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

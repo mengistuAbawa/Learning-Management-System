@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import LessonProgressPanel from "../components/LessonProgressPanel";
 import {
   ArrowDown,
   ArrowLeft,
@@ -893,6 +894,15 @@ export default function CourseContent() {
                 </div>
               )}
             </section>
+
+            {user?.role === "student" && selectedLesson && (
+              <div className="mt-4">
+                <LessonProgressPanel
+                  courseId={courseId}
+                  lessonId={selectedLesson.id}
+                />
+              </div>
+            )}
           </aside>
         </div>
 

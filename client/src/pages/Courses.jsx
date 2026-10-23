@@ -18,9 +18,11 @@ import {
   Search,
   ShieldCheck,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 
+import EnrollButton from "../components/EnrollButton";
 import { useAuth } from "../context/AuthContext";
 import {
   createCourse,
@@ -413,6 +415,22 @@ function CourseCard({ course, canManage, onEdit, onDelete, onArchive }) {
           <BookOpen className="h-4 w-4" />
           View curriculum
         </Link>
+
+        {!canManage && course.status === "published" && (
+          <div className="mt-4">
+            <EnrollButton courseId={course.id} />
+          </div>
+        )}
+
+        {canManage && (
+          <Link
+            to={`/courses/${course.id}/enrollments`}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-3 hover:bg-slate-800"
+          >
+            <Users className="h-4 w-4" />
+            Manage enrollments
+          </Link>
+        )}
 
         {canManage && (
           <div className="mt-4 flex flex-wrap gap-2">

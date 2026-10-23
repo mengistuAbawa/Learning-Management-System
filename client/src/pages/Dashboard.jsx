@@ -70,6 +70,16 @@ export default function Dashboard() {
               Explore courses
             </Link>
 
+            {user?.role === "student" && (
+              <Link
+                to="/my-learning"
+                className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+              >
+                <BookOpen className="h-5 w-5" />
+                <span>My Learning</span>
+              </Link>
+            )}
+
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold">{user?.full_name}</p>
               <p className="text-xs capitalize text-slate-400">
