@@ -4,6 +4,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Courses from "./pages/Courses";
+import CourseAssignments from "./pages/CourseAssignments";
 
 import ProtectedRoute, {
   PageLoader,
@@ -57,6 +58,10 @@ export default function App() {
         <Route path="/courses/:courseId/learn" element={<CourseContent />} />
         <Route path="/my-learning" element={<MyLearning />} />
         <Route path="/courses/:courseId/enrollments" element={<CourseEnrollments />} />
+        <Route
+          path="/courses/:courseId/assignments"
+          element={<CourseAssignments />}
+        />
         <Route
           path="/admin"
           element={

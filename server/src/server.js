@@ -13,6 +13,7 @@ const moduleRoutes = require("./routes/moduleRoutes");
 const lessonRoutes = require("./routes/lessonRoutes");
 const enrollmentRoutes = require("./routes/enrollmentRoutes");
 const progressRoutes = require("./routes/progressRoutes");
+const assignmentRoutes = require("./routes/assignmentRoutes");
 const app = express();
 
 const PORT = Number(process.env.PORT) || 5000;
@@ -47,6 +48,7 @@ app.use("/api", moduleRoutes);
 app.use("/api", lessonRoutes);
 app.use("/api/enrollments", enrollmentRoutes);
 app.use("/api/progress", progressRoutes);
+app.use("/api", assignmentRoutes);
 app.use(
   "/api",
   rateLimit({
