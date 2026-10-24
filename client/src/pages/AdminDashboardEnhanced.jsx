@@ -28,6 +28,14 @@ import NotificationBell from "../components/NotificationBell";
 import { getAdminAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
 
+const initialRecentUsers = [
+  { id: 1, name: "Asifasd Asdfasf", date: "Mar 27, 2024", color: "bg-blue-100", active: true },
+  { id: 2, name: "James MacDiarmid", date: "Apr 27, 2024", tags: ["New Employees", "Sales"], color: "bg-purple-100", active: true },
+  { id: 3, name: "Test User", date: "May 27, 2024", color: "bg-green-100", active: false },
+  { id: 4, name: "Mike White", date: "Jun 27, 2024", color: "bg-yellow-100", active: true },
+  { id: 5, name: "Heimo Grässer", date: "Jul 27, 2024", color: "bg-pink-100", active: false },
+];
+
 export default function AdminDashboardEnhanced() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -35,6 +43,7 @@ export default function AdminDashboardEnhanced() {
   const [error, setError] = useState("");
   const [analytics, setAnalytics] = useState(null);
   const [systemHealth, setSystemHealth] = useState(null);
+  const [recentUsers, setRecentUsers] = useState(initialRecentUsers);
   const [showInstructorForm, setShowInstructorForm] = useState(false);
   const [instructorForm, setInstructorForm] = useState({
     full_name: "",
@@ -204,6 +213,19 @@ export default function AdminDashboardEnhanced() {
             >
               Live classes
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setInstructorError("");
+                setInstructorSuccess("");
+                setShowInstructorForm(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-500"
+            >
+              <UserPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add Instructor</span>
+              <span className="sm:hidden">Add</span>
+            </button>
             <button className="rounded-lg hover:bg-slate-100 p-2">
               <Bell className="h-5 w-5 text-slate-600" />
             </button>
@@ -253,28 +275,10 @@ export default function AdminDashboardEnhanced() {
         </div>
 
         <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="font-semibold text-slate-900">Instructor accounts</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Create an instructor account and provide the credentials to its owner.
-              </p>
-            </div>
-            {!showInstructorForm && (
-              <button
-                type="button"
-                onClick={() => {
-                  setInstructorError("");
-                  setInstructorSuccess("");
-                  setShowInstructorForm(true);
-                }}
-                className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500"
-              >
-                <UserPlus className="h-4 w-4" />
-                Create instructor
-              </button>
-            )}
-          </div>
+          <h2 className="font-semibold text-slate-900">Instructor accounts</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Create an instructor account and provide the credentials to its owner.
+          </p>
 
           {instructorSuccess && (
             <p
@@ -593,37 +597,10 @@ export default function AdminDashboardEnhanced() {
             </div>
 
             <div className="space-y-4">
-              {[
-                {
-                  name: "Asifasd Asdfasf",
-                  date: "Mar 27, 2024",
-                  color: "bg-blue-100",
-                },
-                {
-                  name: "James MacDiarmid",
-                  date: "Apr 27, 2024",
-                  tags: ["New Employees", "Sales"],
-                  color: "bg-purple-100",
-                },
-                {
-                  name: "Test User",
-                  date: "May 27, 2024",
-                  color: "bg-green-100",
-                },
-                {
-                  name: "Mike White",
-                  date: "Jun 27, 2024",
-                  color: "bg-yellow-100",
-                },
-                {
-                  name: "Heimo Grässer",
-                  date: "Jul 27, 2024",
-                  color: "bg-pink-100",
-                },
-              ].map((user, idx) => (
+              {recentUsers.map((user) => (
                 <div
-                  key={idx}
-                  className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0"
+                  key={user.id}
+                  className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -632,9 +609,7 @@ export default function AdminDashboardEnhanced() {
                       <UserRound className="h-5 w-5 text-slate-600" />
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900">
-                        {user.name}
-                      </p>
+                      <p className="font-semibold text-slate-900">{user.name}</p>
                       {user.tags && (
                         <div className="flex gap-1 mt-1">
                           {user.tags.map((tag) => (
@@ -649,7 +624,37 @@ export default function AdminDashboardEnhanced() {
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-slate-500">{user.date}</p>
+
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-slate-500">{user.date}</p>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+                        aria-label={`Edit ${user.name}`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-700 hover:bg-red-100"
+                        aria-label={`Delete ${user.name}`}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-md px-2 py-1 text-[10px] font-semibold ${
+                          user.active
+                            ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        }`}
+                        aria-label={user.active ? `Deactivate ${user.name}` : `Activate ${user.name}`}
+                      >
+                        {user.active ? "Deactivate" : "Activate"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
