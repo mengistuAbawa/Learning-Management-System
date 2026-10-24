@@ -156,6 +156,12 @@ export default function StudentDashboardEnhanced() {
           </div>
 
           <div className="flex items-center gap-4">
+            <Link
+              to="/live-classes"
+              className="rounded-lg px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+            >
+              Live classes
+            </Link>
             <NotificationBell />
 
             <button className="relative h-10 w-10 flex items-center justify-center rounded-full hover:bg-slate-100">

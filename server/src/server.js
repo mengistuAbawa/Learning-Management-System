@@ -17,6 +17,7 @@ const assignmentRoutes = require("./routes/assignmentRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
 const certificateRoutes = require("./routes/certificateRoutes");
+const liveClassRoutes = require("./routes/liveClassRoutes");
 
 const app = express();
 
@@ -89,6 +90,7 @@ app.use("/api", assignmentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/certificates", certificateRoutes);
+app.use("/api/live-classes", liveClassRoutes);
 app.get("/", (req, res) => {
   res.json({
     success: true,

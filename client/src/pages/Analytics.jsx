@@ -14,9 +14,11 @@ import {
 } from "lucide-react";
 
 import {
+  getAdminAnalyticsOverview,
   getAnalyticsOverview,
   getInstructorStudentPerformance,
 } from "../services/analyticsService";
+import { useAuth } from "../context/AuthContext";
 
 function formatNumber(value) {
   return new Intl.NumberFormat().format(Number(value) || 0);
@@ -1257,16 +1259,24 @@ function AdminAnalytics({ data }) {
 }
 
 export default function Analytics() {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const fetchOverview = useCallback(
+    () =>
+      user?.role === "admin"
+        ? getAdminAnalyticsOverview()
+        : getAnalyticsOverview(),
+    [user?.role]
+  );
 
   const loadAnalytics = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
-      const result = await getAnalyticsOverview();
+      const result = await fetchOverview();
       setData(result);
     } catch (err) {
       setError(
@@ -1276,14 +1286,14 @@ export default function Analytics() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchOverview]);
 
   useEffect(() => {
     let active = true;
 
     const fetchAnalytics = async () => {
       try {
-        const result = await getAnalyticsOverview();
+        const result = await fetchOverview();
         if (active) {
           setData(result);
           setError("");
@@ -1306,7 +1316,7 @@ export default function Analytics() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [fetchOverview]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8

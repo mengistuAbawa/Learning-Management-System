@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense } from "react";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -19,6 +20,8 @@ import Notifications from "./pages/Notifications";
 import Analytics from "./pages/Analytics";
 import MyCertificates from "./pages/MyCertificates";
 import VerifyCertificate from "./pages/VerifyCertificate";
+import LiveClasses from "./pages/LiveClasses";
+const LiveClassroom = lazy(() => import("./pages/LiveClassroom"));
 
 import ProtectedRoute, {
   PageLoader,
@@ -88,6 +91,15 @@ export default function App() {
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/certificates" element={<MyCertificates />} />
+        <Route path="/live-classes" element={<LiveClasses />} />
+        <Route
+          path="/live-classes/:classId/room"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <LiveClassroom />
+            </Suspense>
+          }
+        />
 
         {/* Courses and learning */}
         <Route path="/courses" element={<Courses />} />

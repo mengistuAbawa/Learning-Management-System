@@ -4,7 +4,7 @@ const rateLimit = require("express-rate-limit");
 const { body, validationResult } = require("express-validator");
 
 const authController = require("../controllers/authController");
-const { authenticate } = require("../middleware/auth");
+const { authenticate, authorize } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -74,6 +74,38 @@ router.post(
     ),
   handleValidation,
   authController.register
+);
+
+router.post(
+  "/instructors",
+  authenticate,
+  authorize("admin"),
+  body("full_name")
+    .isString()
+    .withMessage("Full name must be text.")
+    .bail()
+    .trim()
+    .isLength({ min: 2, max: 150 })
+    .withMessage("Full name must contain 2–150 characters.")
+    .matches(/^[\p{L}\p{M}][\p{L}\p{M}\s'.-]*$/u)
+    .withMessage("Full name contains unsupported characters."),
+  validateEmail,
+  body("password")
+    .isString()
+    .withMessage("Password must be text.")
+    .bail()
+    .isStrongPassword({
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    })
+    .withMessage(
+      "Password must have at least 8 characters, including uppercase, lowercase, a number, and a symbol."
+    ),
+  handleValidation,
+  authController.createInstructor
 );
 
 router.post(

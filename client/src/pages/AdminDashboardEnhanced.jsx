@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Download,
   MoreVertical,
+  UserPlus,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -34,6 +35,15 @@ export default function AdminDashboardEnhanced() {
   const [error, setError] = useState("");
   const [analytics, setAnalytics] = useState(null);
   const [systemHealth, setSystemHealth] = useState(null);
+  const [showInstructorForm, setShowInstructorForm] = useState(false);
+  const [instructorForm, setInstructorForm] = useState({
+    full_name: "",
+    email: "",
+    password: "",
+  });
+  const [instructorError, setInstructorError] = useState("");
+  const [instructorSuccess, setInstructorSuccess] = useState("");
+  const [creatingInstructor, setCreatingInstructor] = useState(false);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -80,6 +90,57 @@ export default function AdminDashboardEnhanced() {
   function handleLogout() {
     logout();
     navigate("/login", { replace: true });
+  }
+
+  function handleInstructorChange(event) {
+    setInstructorForm((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }));
+  }
+
+  async function handleCreateInstructor(event) {
+    event.preventDefault();
+    setInstructorError("");
+    setInstructorSuccess("");
+    setCreatingInstructor(true);
+
+    try {
+      const response = await api.post("/auth/instructors", {
+        full_name: instructorForm.full_name.trim(),
+        email: instructorForm.email.trim(),
+        password: instructorForm.password,
+      });
+
+      setAnalytics((current) =>
+        current
+          ? {
+              ...current,
+              summary: {
+                ...current.summary,
+                total_users: Number(current.summary.total_users || 0) + 1,
+                total_instructors:
+                  Number(current.summary.total_instructors || 0) + 1,
+              },
+            }
+          : current
+      );
+      setInstructorForm({ full_name: "", email: "", password: "" });
+      setInstructorSuccess(
+        `${response.data.user.full_name} can now sign in as an instructor.`
+      );
+      setShowInstructorForm(false);
+    } catch (requestError) {
+      const validationErrors = requestError.response?.data?.errors;
+      setInstructorError(
+        validationErrors?.length
+          ? validationErrors.map((item) => item.message).join(" ")
+          : requestError.response?.data?.message ||
+              "Unable to create the instructor account. Please try again."
+      );
+    } finally {
+      setCreatingInstructor(false);
+    }
   }
 
   if (loading) {
@@ -137,6 +198,12 @@ export default function AdminDashboardEnhanced() {
           </div>
 
           <div className="flex items-center gap-4">
+            <Link
+              to="/live-classes"
+              className="rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50"
+            >
+              Live classes
+            </Link>
             <button className="rounded-lg hover:bg-slate-100 p-2">
               <Bell className="h-5 w-5 text-slate-600" />
             </button>
@@ -184,6 +251,129 @@ export default function AdminDashboardEnhanced() {
             Welcome to the LMS Administration Panel
           </p>
         </div>
+
+        <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="font-semibold text-slate-900">Instructor accounts</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Create an instructor account and provide the credentials to its owner.
+              </p>
+            </div>
+            {!showInstructorForm && (
+              <button
+                type="button"
+                onClick={() => {
+                  setInstructorError("");
+                  setInstructorSuccess("");
+                  setShowInstructorForm(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500"
+              >
+                <UserPlus className="h-4 w-4" />
+                Create instructor
+              </button>
+            )}
+          </div>
+
+          {instructorSuccess && (
+            <p
+              role="status"
+              className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700"
+            >
+              {instructorSuccess}
+            </p>
+          )}
+
+          {showInstructorForm && (
+            <form
+              onSubmit={handleCreateInstructor}
+              className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2"
+            >
+              {instructorError && (
+                <p
+                  role="alert"
+                  className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 sm:col-span-2"
+                >
+                  {instructorError}
+                </p>
+              )}
+
+              <label className="text-sm font-medium text-slate-700">
+                Full name
+                <input
+                  name="full_name"
+                  type="text"
+                  autoComplete="name"
+                  minLength={2}
+                  maxLength={150}
+                  required
+                  value={instructorForm.full_name}
+                  onChange={handleInstructorChange}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                />
+              </label>
+
+              <label className="text-sm font-medium text-slate-700">
+                Email address
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  maxLength={255}
+                  required
+                  value={instructorForm.email}
+                  onChange={handleInstructorChange}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                />
+              </label>
+
+              <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                Temporary password
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                  value={instructorForm.password}
+                  onChange={handleInstructorChange}
+                  aria-describedby="instructor-password-help"
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                />
+                <span
+                  id="instructor-password-help"
+                  className="mt-1 block text-xs font-normal text-slate-500"
+                >
+                  Use at least 8 characters, including uppercase, lowercase, a number, and a symbol.
+                </span>
+              </label>
+
+              <div className="flex gap-3 sm:col-span-2">
+                <button
+                  type="submit"
+                  disabled={creatingInstructor}
+                  className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {creatingInstructor ? "Creating account..." : "Create account"}
+                </button>
+                <button
+                  type="button"
+                  disabled={creatingInstructor}
+                  onClick={() => {
+                    setShowInstructorForm(false);
+                    setInstructorForm({ full_name: "", email: "", password: "" });
+                    setInstructorError("");
+                  }}
+                  className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
 
         {/* Key Metrics */}
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

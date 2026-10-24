@@ -86,6 +86,42 @@ async function register(req, res) {
   }
 }
 
+async function createInstructor(req, res) {
+  try {
+    const fullName = req.body.full_name.trim();
+    const email = req.body.email.trim().toLowerCase();
+    const passwordHash = await bcrypt.hash(req.body.password, SALT_ROUNDS);
+
+    const result = await pool.query(
+      `INSERT INTO users (full_name, email, password_hash, role)
+       VALUES ($1, $2, $3, 'instructor')
+       RETURNING id, full_name, email, role, avatar_url,
+                 bio, is_active, created_at`,
+      [fullName, email, passwordHash]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Instructor account created successfully.",
+      user: publicUser(result.rows[0]),
+    });
+  } catch (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        message: "An account with this email already exists.",
+      });
+    }
+
+    console.error("Instructor account creation error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to create the instructor account.",
+    });
+  }
+}
+
 async function login(req, res) {
   try {
     const email = req.body.email.trim().toLowerCase();
@@ -156,6 +192,7 @@ async function me(req, res) {
 
 module.exports = {
   register,
+  createInstructor,
   login,
   me,
 };

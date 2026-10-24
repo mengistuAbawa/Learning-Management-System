@@ -79,6 +79,18 @@ export default function Dashboard() {
               <Activity size={20} />
               <span>Analytics</span>
             </NavLink>
+            <NavLink
+              to="/live-classes"
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-xl px-4 py-3 transition ${
+                  isActive
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`
+              }
+            >
+              <span>Live classes</span>
+            </NavLink>
             <Link
               to="/courses"
               className="hidden rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 hover:text-white sm:inline-flex"

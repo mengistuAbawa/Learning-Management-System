@@ -139,6 +139,12 @@ export default function InstructorDashboardEnhanced() {
           </div>
 
           <div className="flex items-center gap-4">
+            <Link
+              to="/live-classes"
+              className="rounded-lg px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50"
+            >
+              Live classes
+            </Link>
             <button className="rounded-lg hover:bg-slate-100 p-2 relative">
               <Bell className="h-5 w-5 text-slate-600" />
               <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />

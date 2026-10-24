@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import api from "./api";
-import { getAnalyticsOverview } from "./analyticsService";
+import {
+  getAdminAnalyticsOverview,
+  getAnalyticsOverview,
+} from "./analyticsService";
 import {
   deleteNotification,
   getNotifications,
@@ -34,6 +37,14 @@ describe("client API service contracts", () => {
 
     await expect(getAnalyticsOverview()).resolves.toEqual(analytics);
     expect(api.get).toHaveBeenCalledWith("/analytics/overview");
+  });
+
+  it("retrieves platform analytics from the administrator-only endpoint", async () => {
+    const analytics = { role: "admin", summary: { total_users: 4 } };
+    api.get.mockResolvedValue({ data: { success: true, analytics } });
+
+    await expect(getAdminAnalyticsOverview()).resolves.toEqual(analytics);
+    expect(api.get).toHaveBeenCalledWith("/analytics/admin/overview");
   });
 
   it("requests course catalog data with the supplied filters", async () => {

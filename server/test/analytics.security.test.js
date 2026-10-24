@@ -15,6 +15,7 @@ let instructorId;
 let otherInstructorId;
 let adminId;
 let registeredStudentId;
+let createdInstructorId;
 let ownCourseId;
 let otherCourseId;
 let ownEnrollmentId;
@@ -39,6 +40,25 @@ async function request(path, { token, method = "GET" } = {}) {
   const response = await fetch(`${baseUrl}/api${path}`, {
     method,
     headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  return {
+    status: response.status,
+    body: await response.json(),
+  };
+}
+
+async function requestWithBody(path, { token, method = "POST", body } = {}) {
+  const headers = { "Content-Type": "application/json" };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${baseUrl}/api${path}`, {
+    method,
+    headers,
+    body: JSON.stringify(body),
   });
 
   return {
@@ -203,6 +223,7 @@ after(async () => {
       otherInstructorId,
       adminId,
       registeredStudentId,
+      createdInstructorId,
     ].filter(Boolean);
     if (userIds.length) {
       await pool.query("DELETE FROM users WHERE id = ANY($1::bigint[])", [userIds]);
@@ -336,6 +357,50 @@ test("analytics endpoint enforces authentication and role-scoped data access", a
   await t.test("administrators cannot use the student and instructor analytics endpoint", async () => {
     const result = await request("/analytics/overview", { token: adminToken });
     assert.equal(result.status, 403);
+  });
+
+  await t.test("only administrators can create instructor accounts", async () => {
+    const accountDetails = {
+      full_name: "Admin Created Instructor",
+      email: `admin-created-${Date.now()}@example.invalid`,
+      password: "StrongPass1!",
+      role: "admin",
+    };
+
+    const unauthenticated = await requestWithBody("/auth/instructors", {
+      body: accountDetails,
+    });
+    assert.equal(unauthenticated.status, 401);
+
+    for (const token of [ownToken, instructorToken]) {
+      const forbidden = await requestWithBody("/auth/instructors", {
+        token,
+        body: accountDetails,
+      });
+      assert.equal(forbidden.status, 403);
+    }
+
+    const created = await requestWithBody("/auth/instructors", {
+      token: adminToken,
+      body: accountDetails,
+    });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.user.role, "instructor");
+    assert.equal(Object.hasOwn(created.body.user, "password_hash"), false);
+    createdInstructorId = created.body.user.id;
+
+    const storedPassword = await pool.query(
+      "SELECT password_hash FROM users WHERE id = $1",
+      [createdInstructorId]
+    );
+    const bcrypt = require("bcryptjs");
+    assert.equal(
+      await bcrypt.compare(
+        accountDetails.password,
+        storedPassword.rows[0].password_hash
+      ),
+      true
+    );
   });
 
   await t.test("denies unexpected roles without querying analytics data", async () => {
