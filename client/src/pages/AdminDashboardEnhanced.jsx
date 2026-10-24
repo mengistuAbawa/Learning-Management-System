@@ -24,7 +24,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NotificationBell from "../components/NotificationBell";
-import { getAnalyticsOverview } from "../services/analyticsService";
+import { getAdminAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
 
 export default function AdminDashboardEnhanced() {
@@ -43,7 +43,7 @@ export default function AdminDashboardEnhanced() {
 
         // Load analytics
         try {
-          const analyticsData = await getAnalyticsOverview();
+          const analyticsData = await getAdminAnalyticsOverview();
           setAnalytics(analyticsData);
         } catch {
           setAnalytics(null);
@@ -93,11 +93,12 @@ export default function AdminDashboardEnhanced() {
     );
   }
 
-  const totalUsers = analytics?.total_users || 0;
-  const totalCourses = analytics?.total_courses || 0;
-  const totalEnrollments = analytics?.total_enrollments || 0;
-  const studentCount = analytics?.student_count || 0;
-  const instructorCount = analytics?.instructor_count || 0;
+  const summary = analytics?.summary;
+  const totalUsers = summary?.total_users || 0;
+  const totalCourses = summary?.total_courses || 0;
+  const totalEnrollments = summary?.total_enrollments || 0;
+  const studentCount = summary?.total_students || 0;
+  const instructorCount = summary?.total_instructors || 0;
   const enrollmentCount = 45; // Mock data
 
   // Mock data for charts
@@ -195,19 +196,19 @@ export default function AdminDashboardEnhanced() {
             },
             {
               label: "Unread Courses",
-              value: analytics?.draft_courses || 0,
+              value: summary?.draft_courses || 0,
               icon: BookOpen,
               color: "from-purple-500 to-purple-600",
             },
             {
               label: "Learning Courses",
-              value: analytics?.published_courses || 0,
+              value: summary?.published_courses || 0,
               icon: TrendingUp,
               color: "from-green-500 to-green-600",
             },
             {
               label: "Completed Courses",
-              value: analytics?.completed_courses || 0,
+              value: summary?.completed_enrollments || 0,
               icon: CheckCircle2,
               color: "from-teal-500 to-teal-600",
             },

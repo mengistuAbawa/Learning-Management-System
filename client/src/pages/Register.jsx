@@ -166,6 +166,31 @@ export default function Register() {
         </div>
 
         <div>
+          <label htmlFor="role" className="mb-2 block text-sm font-medium text-slate-200">
+            Account type
+          </label>
+          <select
+            id="role"
+            name="role"
+            value="student"
+            disabled={submitting}
+            aria-describedby="role-help"
+            className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3.5 text-white outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <option value="student">Student</option>
+            <option value="instructor" disabled>
+              Instructor (assigned by an admin)
+            </option>
+            <option value="admin" disabled>
+              Admin (created by an admin)
+            </option>
+          </select>
+          <p id="role-help" className="mt-2 text-xs text-slate-500">
+            Instructor and admin accounts must be assigned or created by an existing admin.
+          </p>
+        </div>
+
+        <div>
           <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-200">
             Password
           </label>

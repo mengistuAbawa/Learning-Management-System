@@ -1359,9 +1359,7 @@ async function getOverview(req, res, next) {
     const { id: userId, role } = req.user;
     let analytics;
 
-    if (role === "admin") {
-      analytics = await getAdminAnalytics();
-    } else if (role === "instructor") {
+    if (role === "instructor") {
       analytics = await getInstructorAnalytics(userId);
     } else if (role === "student") {
       analytics = await getStudentAnalytics(userId);
@@ -1378,7 +1376,17 @@ async function getOverview(req, res, next) {
   }
 }
 
+async function getAdminOverview(req, res, next) {
+  try {
+    const analytics = await getAdminAnalytics();
+    return res.json({ success: true, analytics });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getOverview,
+  getAdminOverview,
   getInstructorStudentPerformance,
 };

@@ -6,6 +6,11 @@ export async function getAnalyticsOverview() {
   return response.data.analytics;
 }
 
+export async function getAdminAnalyticsOverview() {
+  const response = await api.get("/analytics/admin/overview");
+  return response.data.analytics;
+}
+
 export async function getInstructorStudentPerformance(params) {
   const response = await api.get("/analytics/students", { params });
   return response.data;

@@ -14,6 +14,7 @@ let otherStudentId;
 let instructorId;
 let otherInstructorId;
 let adminId;
+let registeredStudentId;
 let ownCourseId;
 let otherCourseId;
 let ownEnrollmentId;
@@ -201,6 +202,7 @@ after(async () => {
       instructorId,
       otherInstructorId,
       adminId,
+      registeredStudentId,
     ].filter(Boolean);
     if (userIds.length) {
       await pool.query("DELETE FROM users WHERE id = ANY($1::bigint[])", [userIds]);
@@ -214,6 +216,25 @@ test("analytics endpoint enforces authentication and role-scoped data access", a
   await t.test("rejects unauthenticated requests", async () => {
     const result = await request("/analytics/overview");
     assert.equal(result.status, 401);
+  });
+
+  await t.test("public registration ignores an administrator role request", async () => {
+    const response = await fetch(`${baseUrl}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        full_name: "Registration Security Test",
+        email: `registration-security-${Date.now()}@example.invalid`,
+        password: "StrongPass1!",
+        role: "admin",
+      }),
+    });
+    const result = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(result.user.role, "student");
+    assert.equal(Object.hasOwn(result.user, "password_hash"), false);
+    registeredStudentId = result.user.id;
   });
 
   await t.test("students see only their own enrollment, progress, and submissions", async () => {
@@ -290,7 +311,9 @@ test("analytics endpoint enforces authentication and role-scoped data access", a
   });
 
   await t.test("administrators receive platform-wide summary counts", async () => {
-    const result = await request("/analytics/overview", { token: adminToken });
+    const result = await request("/analytics/admin/overview", {
+      token: adminToken,
+    });
 
     assert.equal(result.status, 200);
     assert.equal(result.body.analytics.role, "admin");
@@ -298,6 +321,21 @@ test("analytics endpoint enforces authentication and role-scoped data access", a
     assert.ok(result.body.analytics.summary.total_courses >= 2);
     assert.ok(result.body.analytics.summary.total_enrollments >= 2);
     assert.ok(result.body.analytics.summary.total_submissions >= 2);
+  });
+
+  await t.test("student and instructor roles cannot access administrator analytics", async () => {
+    const unauthenticated = await request("/analytics/admin/overview");
+    assert.equal(unauthenticated.status, 401);
+
+    for (const token of [ownToken, instructorToken]) {
+      const result = await request("/analytics/admin/overview", { token });
+      assert.equal(result.status, 403);
+    }
+  });
+
+  await t.test("administrators cannot use the student and instructor analytics endpoint", async () => {
+    const result = await request("/analytics/overview", { token: adminToken });
+    assert.equal(result.status, 403);
   });
 
   await t.test("denies unexpected roles without querying analytics data", async () => {

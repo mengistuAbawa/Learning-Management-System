@@ -77,7 +77,14 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />
         <Route path="/instructor-dashboard" element={<InstructorDashboard />} />
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
+        <Route
+          path="/admin-dashboard"
+          element={
+            <RoleRoute allowedRoles={["admin"]}>
+              <AdminDashboard />
+            </RoleRoute>
+          }
+        />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/certificates" element={<MyCertificates />} />
