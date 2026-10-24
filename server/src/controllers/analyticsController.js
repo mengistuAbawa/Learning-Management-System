@@ -100,17 +100,19 @@ async function getStudentAnalytics(userId) {
       c.id AS course_id,
       c.title AS course_title,
       q.max_attempts,
-      COUNT(a.id)::int AS attempts_used,
-      GREATEST(q.max_attempts - COUNT(a.id)::int, 0)::int
-        AS attempts_remaining
+      COUNT(a.id) FILTER (WHERE a.status = 'submitted')::int AS attempts_used,
+      CASE
+        WHEN q.max_attempts IS NULL THEN NULL
+        ELSE GREATEST(q.max_attempts - COUNT(a.id) FILTER (WHERE a.status = 'submitted')::int, 0)::int
+      END AS attempts_remaining
     FROM enrollments e
     JOIN courses c ON c.id = e.course_id
-    JOIN quizzes q ON q.course_id = c.id AND q.is_published = TRUE
+    JOIN quizzes q ON q.course_id = c.id
     LEFT JOIN quiz_attempts a
       ON a.quiz_id = q.id AND a.student_id = e.student_id
     WHERE e.student_id = $1
       AND e.status IN ('active', 'completed')
-    GROUP BY q.id, c.id, c.title
+    GROUP BY q.id, c.id, c.title, q.max_attempts
     ORDER BY c.title, q.title
   `;
 
@@ -118,10 +120,10 @@ async function getStudentAnalytics(userId) {
     SELECT
       c.id AS course_id,
       c.title AS course_title,
-      COUNT(a.id)::int AS attempts,
-      COUNT(a.id) FILTER (WHERE a.passed IS TRUE)::int AS passes,
+      COUNT(a.id) FILTER (WHERE a.status = 'submitted')::int AS attempts,
+      COUNT(a.id) FILTER (WHERE a.status = 'submitted' AND a.passed IS TRUE)::int AS passes,
       ROUND(
-        AVG(CASE WHEN a.total_points > 0
+        AVG(CASE WHEN a.status = 'submitted' AND a.total_points > 0
           THEN 100.0 * a.score / a.total_points
           ELSE NULL
         END)::numeric,
@@ -129,12 +131,9 @@ async function getStudentAnalytics(userId) {
       ) AS average_score_percentage
     FROM enrollments e
     JOIN courses c ON c.id = e.course_id
-    LEFT JOIN quizzes q ON q.course_id = c.id AND q.is_published = TRUE
+    LEFT JOIN quizzes q ON q.course_id = c.id
     LEFT JOIN quiz_attempts a
-      ON a.quiz_id = q.id
-     AND a.student_id = e.student_id
-     AND a.status = 'submitted'
-     AND a.submitted_at IS NOT NULL
+      ON a.quiz_id = q.id AND a.student_id = e.student_id
     WHERE e.student_id = $1
       AND e.status IN ('active', 'completed')
     GROUP BY c.id, c.title
@@ -155,8 +154,8 @@ async function getStudentAnalytics(userId) {
     FROM quiz_attempts a
     WHERE a.student_id = $1
       AND a.status = 'submitted'
-      AND a.submitted_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months'
       AND a.submitted_at IS NOT NULL
+      AND a.submitted_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months'
     GROUP BY DATE_TRUNC('month', a.submitted_at)
     ORDER BY DATE_TRUNC('month', a.submitted_at)
   `;
@@ -226,13 +225,12 @@ async function getStudentAnalytics(userId) {
         c.title AS course_title,
         a.title,
         a.due_at,
-        a.max_points,
+        a.max_score,
         s.id AS submission_id,
         s.submitted_at,
         s.grade,
         s.feedback,
-        s.graded_at,
-        s.status AS submission_status
+        s.graded_at
       FROM enrollments e
       JOIN courses c ON c.id = e.course_id
       JOIN assignments a
@@ -261,11 +259,11 @@ async function getStudentAnalytics(userId) {
           AND submitted_at > due_at
       )::int AS late_submissions,
       ROUND(AVG(grade)::numeric, 2) AS average_grade,
-      ROUND(AVG(100.0 * grade / NULLIF(max_points, 0))::numeric, 2)
+      ROUND(AVG(100.0 * grade / NULLIF(max_score, 0))::numeric, 2)
         AS average_grade_percentage,
-      ROUND(MAX(100.0 * grade / NULLIF(max_points, 0))::numeric, 2)
+      ROUND(MAX(100.0 * grade / NULLIF(max_score, 0))::numeric, 2)
         AS highest_grade_percentage,
-      ROUND(MIN(100.0 * grade / NULLIF(max_points, 0))::numeric, 2)
+      ROUND(MIN(100.0 * grade / NULLIF(max_score, 0))::numeric, 2)
         AS lowest_grade_percentage
     FROM available
   `;
@@ -296,7 +294,7 @@ async function getStudentAnalytics(userId) {
 
   const gradeDistributionQuery = `
     WITH graded AS (
-      SELECT 100.0 * s.grade / NULLIF(a.max_points, 0) AS percentage
+      SELECT 100.0 * s.grade / NULLIF(a.max_score, 0) AS percentage
       FROM assignment_submissions s
       JOIN assignments a ON a.id = s.assignment_id
       JOIN enrollments e
@@ -337,8 +335,8 @@ async function getStudentAnalytics(userId) {
       c.id AS course_id,
       c.title AS course_title,
       s.grade,
-      a.max_points,
-      ROUND(100.0 * s.grade / NULLIF(a.max_points, 0), 2)
+      a.max_score,
+      ROUND(100.0 * s.grade / NULLIF(a.max_score, 0), 2)
         AS grade_percentage,
       s.feedback,
       s.submitted_at,
@@ -464,21 +462,22 @@ async function getStudentAnalytics(userId) {
   const totalCourses = courses.length;
   const lessonsAvailable = courses.reduce(
     (sum, course) => sum + Number(course.total_lessons),
-    0
+    0,
   );
   const lessonsCompleted = courses.reduce(
     (sum, course) => sum + Number(course.completed_lessons),
-    0
+    0,
   );
   const completedEnrollments = courses.filter(
-    (course) => course.status === "completed"
+    (course) => course.status === "completed",
   ).length;
 
   return {
     role: "student",
     summary: {
       enrolledCourses: totalCourses,
-      activeCourses: courses.filter((course) => course.status === "active").length,
+      activeCourses: courses.filter((course) => course.status === "active")
+        .length,
       completedCourses: completedEnrollments,
       overallCompletion: lessonsAvailable
         ? Number(((100 * lessonsCompleted) / lessonsAvailable).toFixed(1))
@@ -489,26 +488,32 @@ async function getStudentAnalytics(userId) {
       totalQuizzesAvailable: availableQuizzesResult.rowCount,
       totalQuizAttempts: Number(quizSummary.total_attempts),
       uniqueQuizzesAttempted: Number(quizSummary.unique_quizzes_attempted),
-      averageQuizScore: quizSummary.average_score_percentage === null
-        ? null
-        : Number(quizSummary.average_score_percentage),
-      highestQuizScore: quizSummary.highest_score_percentage === null
-        ? null
-        : Number(quizSummary.highest_score_percentage),
-      lowestQuizScore: quizSummary.lowest_score_percentage === null
-        ? null
-        : Number(quizSummary.lowest_score_percentage),
+      averageQuizScore:
+        quizSummary.average_score_percentage === null
+          ? null
+          : Number(quizSummary.average_score_percentage),
+      highestQuizScore:
+        quizSummary.highest_score_percentage === null
+          ? null
+          : Number(quizSummary.highest_score_percentage),
+      lowestQuizScore:
+        quizSummary.lowest_score_percentage === null
+          ? null
+          : Number(quizSummary.lowest_score_percentage),
       quizPassCount: Number(quizSummary.pass_count),
       quizFailureCount: Number(quizSummary.failure_count),
       quizPassRate: Number(quizSummary.total_attempts)
-        ? Number((
-            (100 * Number(quizSummary.pass_count)) /
-            Number(quizSummary.total_attempts)
-          ).toFixed(1))
+        ? Number(
+            (
+              (100 * Number(quizSummary.pass_count)) /
+              Number(quizSummary.total_attempts)
+            ).toFixed(1),
+          )
         : null,
-      averageQuizDurationMinutes: quizSummary.average_duration_minutes === null
-        ? null
-        : Number(quizSummary.average_duration_minutes),
+      averageQuizDurationMinutes:
+        quizSummary.average_duration_minutes === null
+          ? null
+          : Number(quizSummary.average_duration_minutes),
       totalAssignments: Number(assignmentSummary.total_assignments),
       totalSubmissions: Number(assignmentSummary.submitted),
       missingAssignments: Number(assignmentSummary.missing),
@@ -516,18 +521,22 @@ async function getStudentAnalytics(userId) {
       gradedSubmissions: Number(assignmentSummary.graded),
       awaitingGrade: Number(assignmentSummary.awaiting_grade),
       lateSubmissions: Number(assignmentSummary.late_submissions),
-      averageGrade: assignmentSummary.average_grade === null
-        ? null
-        : Number(assignmentSummary.average_grade),
-      averageGradePercentage: assignmentSummary.average_grade_percentage === null
-        ? null
-        : Number(assignmentSummary.average_grade_percentage),
-      highestGradePercentage: assignmentSummary.highest_grade_percentage === null
-        ? null
-        : Number(assignmentSummary.highest_grade_percentage),
-      lowestGradePercentage: assignmentSummary.lowest_grade_percentage === null
-        ? null
-        : Number(assignmentSummary.lowest_grade_percentage),
+      averageGrade:
+        assignmentSummary.average_grade === null
+          ? null
+          : Number(assignmentSummary.average_grade),
+      averageGradePercentage:
+        assignmentSummary.average_grade_percentage === null
+          ? null
+          : Number(assignmentSummary.average_grade_percentage),
+      highestGradePercentage:
+        assignmentSummary.highest_grade_percentage === null
+          ? null
+          : Number(assignmentSummary.highest_grade_percentage),
+      lowestGradePercentage:
+        assignmentSummary.lowest_grade_percentage === null
+          ? null
+          : Number(assignmentSummary.lowest_grade_percentage),
       certificatesEarned: Number(certificateResult.rows[0].earned),
     },
     courses,
@@ -599,7 +608,7 @@ async function getInstructorAnalytics(userId) {
        JOIN assignments a ON a.id = s.assignment_id
        WHERE a.course_id = c.id AND s.grade IS NOT NULL) AS average_grade,
       (SELECT ROUND(AVG(
-         100.0 * s.grade / NULLIF(a.max_points, 0)
+         100.0 * s.grade / NULLIF(a.max_score, 0)
        )::numeric, 2)
        FROM assignment_submissions s
        JOIN assignments a ON a.id = s.assignment_id
@@ -724,7 +733,7 @@ async function getInstructorAnalytics(userId) {
         2
       ) AS average_grade,
       ROUND(
-        (AVG(100.0 * s.grade / NULLIF(a.max_points, 0))
+        (AVG(100.0 * s.grade / NULLIF(a.max_score, 0))
           FILTER (WHERE s.grade IS NOT NULL))::numeric,
         2
       ) AS average_grade_percentage,
@@ -751,7 +760,7 @@ async function getInstructorAnalytics(userId) {
       u.id AS student_id,
       u.full_name AS student_name,
       s.grade,
-      a.max_points,
+      a.max_score,
       s.graded_at,
       s.submitted_at,
       s.feedback
@@ -823,42 +832,47 @@ async function getInstructorAnalytics(userId) {
   ]);
 
   const courses = coursesResult.rows;
-  const totals = courses.reduce((summary, course) => {
-    summary.totalModules += Number(course.total_modules);
-    summary.totalLessons += Number(course.total_lessons);
-    summary.totalEnrollments += Number(course.enrollment_count);
-    summary.activeEnrollments += Number(course.active_enrollments);
-    summary.completedEnrollments += Number(course.completed_enrollments);
-    summary.totalQuizzes += Number(course.total_quizzes);
-    summary.quizAttempts += Number(course.quiz_attempts);
-    summary.totalAssignments += Number(course.total_assignments);
-    summary.totalSubmissions += Number(course.total_submissions);
-    summary.gradedSubmissions += Number(course.graded_submissions);
-    summary.awaitingGrade += Number(course.awaiting_grade);
-    summary.publishedCourses += course.status === "published" ? 1 : 0;
-    summary.draftCourses += course.status === "draft" ? 1 : 0;
-    return summary;
-  }, {
-    totalModules: 0,
-    totalLessons: 0,
-    totalEnrollments: 0,
-    activeEnrollments: 0,
-    completedEnrollments: 0,
-    totalQuizzes: 0,
-    quizAttempts: 0,
-    totalAssignments: 0,
-    totalSubmissions: 0,
-    gradedSubmissions: 0,
-    awaitingGrade: 0,
-    publishedCourses: 0,
-    draftCourses: 0,
-  });
+  const totals = courses.reduce(
+    (summary, course) => {
+      summary.totalModules += Number(course.total_modules);
+      summary.totalLessons += Number(course.total_lessons);
+      summary.totalEnrollments += Number(course.enrollment_count);
+      summary.activeEnrollments += Number(course.active_enrollments);
+      summary.completedEnrollments += Number(course.completed_enrollments);
+      summary.totalQuizzes += Number(course.total_quizzes);
+      summary.quizAttempts += Number(course.quiz_attempts);
+      summary.totalAssignments += Number(course.total_assignments);
+      summary.totalSubmissions += Number(course.total_submissions);
+      summary.gradedSubmissions += Number(course.graded_submissions);
+      summary.awaitingGrade += Number(course.awaiting_grade);
+      summary.publishedCourses += course.status === "published" ? 1 : 0;
+      summary.draftCourses += course.status === "draft" ? 1 : 0;
+      return summary;
+    },
+    {
+      totalModules: 0,
+      totalLessons: 0,
+      totalEnrollments: 0,
+      activeEnrollments: 0,
+      completedEnrollments: 0,
+      totalQuizzes: 0,
+      quizAttempts: 0,
+      totalAssignments: 0,
+      totalSubmissions: 0,
+      gradedSubmissions: 0,
+      awaitingGrade: 0,
+      publishedCourses: 0,
+      draftCourses: 0,
+    },
+  );
   const grading = gradingResult.rows[0];
 
   totals.courseCompletionRate = totals.totalEnrollments
-    ? Number((
-        100 * totals.completedEnrollments / totals.totalEnrollments
-      ).toFixed(1))
+    ? Number(
+        ((100 * totals.completedEnrollments) / totals.totalEnrollments).toFixed(
+          1,
+        ),
+      )
     : 0;
   totals.averageQuizPerformance = courses.length
     ? averageNonNull(courses.map((course) => course.average_quiz_percentage))
@@ -869,12 +883,12 @@ async function getInstructorAnalytics(userId) {
     summary: {
       totalCourses: courses.length,
       ...totals,
-      averageGrade: grading.average_grade === null
-        ? null
-        : Number(grading.average_grade),
-      averageGradePercentage: grading.average_grade_percentage === null
-        ? null
-        : Number(grading.average_grade_percentage),
+      averageGrade:
+        grading.average_grade === null ? null : Number(grading.average_grade),
+      averageGradePercentage:
+        grading.average_grade_percentage === null
+          ? null
+          : Number(grading.average_grade_percentage),
       averageGradingTurnaroundHours:
         grading.average_turnaround_hours === null
           ? null
@@ -893,11 +907,11 @@ async function getInstructorAnalytics(userId) {
 async function getInstructorGradeDistribution(userId) {
   const result = await pool.query(
     `WITH grades AS (
-       SELECT 100.0 * s.grade / NULLIF(a.max_points, 0) AS percentage
+       SELECT 100.0 * s.grade / NULLIF(a.max_score, 0) AS percentage
        FROM courses c
        JOIN assignments a ON a.course_id = c.id
        JOIN assignment_submissions s ON s.assignment_id = a.id
-       WHERE c.instructor_id = $1 AND s.grade IS NOT NULL
+       WHERE c.instructor_id = $1
      )
      SELECT bucket, COUNT(*)::int AS submissions
      FROM (
@@ -920,7 +934,7 @@ async function getInstructorGradeDistribution(userId) {
      ) grouped
      GROUP BY bucket, position
      ORDER BY position`,
-    [userId]
+    [userId],
   );
   return result.rows;
 }
@@ -932,10 +946,12 @@ function averageNonNull(values) {
     .filter(Number.isFinite);
 
   return numericValues.length
-    ? Number((
-        numericValues.reduce((sum, value) => sum + value, 0) /
-        numericValues.length
-      ).toFixed(2))
+    ? Number(
+        (
+          numericValues.reduce((sum, value) => sum + value, 0) /
+          numericValues.length
+        ).toFixed(2),
+      )
     : null;
 }
 
@@ -951,9 +967,10 @@ async function getInstructorStudentPerformance(req, res, next) {
   const pageSize = Number(req.query.pageSize ?? 20);
   const courseId = req.query.courseId ?? null;
   const status = req.query.status ?? null;
-  const search = typeof req.query.search === "string"
-    ? req.query.search.trim().slice(0, 100)
-    : null;
+  const search =
+    typeof req.query.search === "string"
+      ? req.query.search.trim().slice(0, 100)
+      : null;
   const sortBy = req.query.sortBy ?? "enrolled_at";
   const sortOrder = req.query.sortOrder ?? "desc";
   const sortColumns = {
@@ -966,8 +983,13 @@ async function getInstructorStudentPerformance(req, res, next) {
     ungraded_assignments: "ungraded_assignments",
   };
 
-  if (!Number.isInteger(page) || page < 1 ||
-      !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+  if (
+    !Number.isInteger(page) ||
+    page < 1 ||
+    !Number.isInteger(pageSize) ||
+    pageSize < 1 ||
+    pageSize > 50
+  ) {
     return res.status(400).json({
       success: false,
       message: "Page must be positive and pageSize must be between 1 and 50.",
@@ -979,14 +1001,19 @@ async function getInstructorStudentPerformance(req, res, next) {
       message: "Invalid course ID.",
     });
   }
-  if (status !== null && !["active", "completed", "cancelled"].includes(status)) {
+  if (
+    status !== null &&
+    !["active", "completed", "cancelled"].includes(status)
+  ) {
     return res.status(400).json({
       success: false,
       message: "Invalid enrollment status filter.",
     });
   }
-  if (!Object.hasOwn(sortColumns, sortBy) ||
-      !["asc", "desc"].includes(sortOrder)) {
+  if (
+    !Object.hasOwn(sortColumns, sortBy) ||
+    !["asc", "desc"].includes(sortOrder)
+  ) {
     return res.status(400).json({
       success: false,
       message: "Invalid sorting option.",
@@ -1009,7 +1036,7 @@ async function getInstructorStudentPerformance(req, res, next) {
        JOIN courses c ON c.id = e.course_id
        JOIN users u ON u.id = e.student_id
        WHERE ${whereSql}`,
-      filterValues
+      filterValues,
     );
 
     const sortColumn = sortColumns[sortBy];
@@ -1071,7 +1098,7 @@ async function getInstructorStudentPerformance(req, res, next) {
            f.enrollment_id,
            ROUND(AVG(
              CASE WHEN s.grade IS NOT NULL
-               THEN 100.0 * s.grade / NULLIF(a.max_points, 0)
+               THEN 100.0 * s.grade / NULLIF(a.max_score, 0)
                ELSE NULL
              END
            )::numeric, 2) AS assignment_average,
@@ -1113,7 +1140,7 @@ async function getInstructorStudentPerformance(req, res, next) {
        LEFT JOIN assignment_metrics a ON a.enrollment_id = f.enrollment_id
        ORDER BY ${sortColumn} ${sortDirection} NULLS LAST, f.enrollment_id DESC
        LIMIT $5 OFFSET $6`,
-      [...filterValues, pageSize, (page - 1) * pageSize]
+      [...filterValues, pageSize, (page - 1) * pageSize],
     );
 
     return res.json({
@@ -1165,7 +1192,7 @@ async function getAdminAnalytics() {
       (SELECT COUNT(*)::int FROM assignment_submissions) AS total_submissions,
       (SELECT COUNT(*)::int FROM assignment_submissions WHERE grade IS NOT NULL) AS graded_submissions,
       (SELECT COUNT(*)::int FROM assignment_submissions WHERE grade IS NULL) AS awaiting_grade,
-      (SELECT ROUND(AVG(100.0 * s.grade / NULLIF(a.max_points, 0))::numeric, 2)
+      (SELECT ROUND(AVG(100.0 * s.grade / NULLIF(a.max_score, 0))::numeric, 2)
         FROM assignment_submissions s
         JOIN assignments a ON a.id = s.assignment_id
         WHERE s.grade IS NOT NULL) AS average_assignment_percentage,
@@ -1301,16 +1328,20 @@ async function getAdminAnalytics() {
 
   const summary = summaryResult.rows[0];
   summary.course_completion_rate = Number(summary.total_enrollments)
-    ? Number((
-        100 * Number(summary.completed_enrollments) /
-        Number(summary.total_enrollments)
-      ).toFixed(1))
+    ? Number(
+        (
+          (100 * Number(summary.completed_enrollments)) /
+          Number(summary.total_enrollments)
+        ).toFixed(1),
+      )
     : 0;
   summary.quiz_pass_rate = Number(summary.submitted_quiz_attempts)
-    ? Number((
-        100 * Number(summary.quiz_passes) /
-        Number(summary.submitted_quiz_attempts)
-      ).toFixed(1))
+    ? Number(
+        (
+          (100 * Number(summary.quiz_passes)) /
+          Number(summary.submitted_quiz_attempts)
+        ).toFixed(1),
+      )
     : null;
 
   return {

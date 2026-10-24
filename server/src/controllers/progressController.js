@@ -1,5 +1,5 @@
-
 const { pool } = require("../config/db");
+const certificateService = require("../services/certificateService");
 
 const validId = (value) =>
   (typeof value === "string" || typeof value === "number") &&
@@ -17,7 +17,7 @@ async function getStudentEnrollment(studentId, courseId) {
      WHERE student_id = $1 AND course_id = $2
        AND status IN ('active', 'completed')
      LIMIT 1`,
-    [studentId, courseId]
+    [studentId, courseId],
   );
 
   return result.rows[0] || null;
@@ -43,14 +43,13 @@ async function getCourseProgressData(studentId, courseId) {
      LEFT JOIN lesson_progress lp
        ON lp.lesson_id = l.id AND lp.enrollment_id = $1
      WHERE m.course_id = $2`,
-    [enrollment.id, courseId]
+    [enrollment.id, courseId],
   );
 
   const stats = result.rows[0];
   const total = stats.total_lessons;
   const completed = stats.completed_lessons;
-  const percentage =
-    total === 0 ? 0 : Math.round((completed / total) * 100);
+  const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
 
   return {
     enrollment_id: enrollment.id,
@@ -80,7 +79,7 @@ async function getCourseProgress(req, res, next) {
   try {
     const course = await pool.query(
       `SELECT id, status FROM courses WHERE id = $1`,
-      [courseId]
+      [courseId],
     );
 
     if (!course.rowCount) {
@@ -93,7 +92,7 @@ async function getCourseProgress(req, res, next) {
       return errorResponse(
         res,
         403,
-        "Enroll in this course before viewing your progress."
+        "Enroll in this course before viewing your progress.",
       );
     }
 
@@ -117,21 +116,17 @@ async function updateLessonProgress(req, res, next) {
     return errorResponse(
       res,
       400,
-      "The completed field must be true or false."
+      "The completed field must be true or false.",
     );
   }
 
   const position = last_position_seconds ?? 0;
 
-  if (
-    !Number.isInteger(position) ||
-    position < 0 ||
-    position > 2147483647
-  ) {
+  if (!Number.isInteger(position) || position < 0 || position > 2147483647) {
     return errorResponse(
       res,
       400,
-      "last_position_seconds must be a non-negative integer."
+      "last_position_seconds must be a non-negative integer.",
     );
   }
 
@@ -150,7 +145,7 @@ async function updateLessonProgress(req, res, next) {
        JOIN modules m ON m.id = l.module_id
        JOIN courses c ON c.id = m.course_id
        WHERE l.id = $1`,
-      [lessonId]
+      [lessonId],
     );
 
     const lesson = lessonResult.rows[0];
@@ -171,7 +166,7 @@ async function updateLessonProgress(req, res, next) {
        WHERE student_id = $1 AND course_id = $2
          AND status IN ('active', 'completed')
        FOR UPDATE`,
-      [req.user.id, lesson.course_id]
+      [req.user.id, lesson.course_id],
     );
 
     const enrollment = enrollmentResult.rows[0];
@@ -181,7 +176,7 @@ async function updateLessonProgress(req, res, next) {
       return errorResponse(
         res,
         403,
-        "You must be enrolled to save lesson progress."
+        "You must be enrolled to save lesson progress.",
       );
     }
 
@@ -202,7 +197,7 @@ async function updateLessonProgress(req, res, next) {
            ELSE NULL
          END,
          updated_at = CURRENT_TIMESTAMP`,
-      [enrollment.id, lesson.id, completed, position]
+      [enrollment.id, lesson.id, completed, position],
     );
 
     const statsResult = await client.query(
@@ -215,14 +210,13 @@ async function updateLessonProgress(req, res, next) {
        LEFT JOIN lesson_progress lp
          ON lp.lesson_id = l.id AND lp.enrollment_id = $1
        WHERE m.course_id = $2`,
-      [enrollment.id, lesson.course_id]
+      [enrollment.id, lesson.course_id],
     );
 
     const total = statsResult.rows[0].total_lessons;
     const done = statsResult.rows[0].completed_lessons;
     const isCompleted = total > 0 && done === total;
-    const percentage =
-      total === 0 ? 0 : Math.round((done / total) * 100);
+    const percentage = total === 0 ? 0 : Math.round((done / total) * 100);
 
     // Completion status is derived from lesson completion.
     const newStatus = isCompleted ? "completed" : "active";
@@ -231,15 +225,28 @@ async function updateLessonProgress(req, res, next) {
       `UPDATE enrollments
        SET status = $1, updated_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
-      [newStatus, enrollment.id]
+      [newStatus, enrollment.id],
     );
+
+    // Auto-issue certificate if course is now completed
+    if (isCompleted && newStatus === "completed") {
+      try {
+        await certificateService.issueCertificate(
+          req.user.id,
+          lesson.course_id,
+        );
+      } catch (certError) {
+        // Log error but don't fail the progress update
+        console.error("Failed to auto-issue certificate:", certError.message);
+      }
+    }
 
     const progressResult = await client.query(
       `SELECT id, lesson_id, completed, last_position_seconds,
               completed_at, updated_at
        FROM lesson_progress
        WHERE enrollment_id = $1 AND lesson_id = $2`,
-      [enrollment.id, lesson.id]
+      [enrollment.id, lesson.id],
     );
 
     await client.query("COMMIT");
@@ -302,7 +309,7 @@ async function getCourseLessonProgress(req, res, next) {
          ON lp.lesson_id = l.id AND lp.enrollment_id = $1
        WHERE m.course_id = $2
        ORDER BY m.position, l.position`,
-      [enrollment.id, courseId]
+      [enrollment.id, courseId],
     );
 
     return res.json({ success: true, data: result.rows });
@@ -316,4 +323,3 @@ module.exports = {
   updateLessonProgress,
   getCourseLessonProgress,
 };
-

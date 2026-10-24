@@ -1,4 +1,3 @@
-
 const { pool } = require("../config/db");
 
 const validId = (value) =>
@@ -48,7 +47,7 @@ async function enrollInCourse(req, res, next) {
        FROM courses
        WHERE id = $1
        FOR SHARE`,
-      [courseId]
+      [courseId],
     );
 
     const course = courseResult.rows[0];
@@ -63,7 +62,7 @@ async function enrollInCourse(req, res, next) {
       return errorResponse(
         res,
         400,
-        "You can enroll only in published courses."
+        "You can enroll only in published courses.",
       );
     }
 
@@ -77,7 +76,7 @@ async function enrollInCourse(req, res, next) {
        WHERE enrollments.status = 'cancelled'
        RETURNING id, student_id, course_id, status,
                  created_at, updated_at`,
-      [studentId, courseId]
+      [studentId, courseId],
     );
 
     if (result.rowCount === 0) {
@@ -86,7 +85,7 @@ async function enrollInCourse(req, res, next) {
                 created_at, updated_at
          FROM enrollments
          WHERE student_id = $1 AND course_id = $2`,
-        [studentId, courseId]
+        [studentId, courseId],
       );
 
       await client.query("COMMIT");
@@ -152,9 +151,9 @@ async function getMyEnrollments(req, res, next) {
        LEFT JOIN lesson_progress lp
          ON lp.lesson_id = l.id AND lp.enrollment_id = e.id
        WHERE e.student_id = $1
-       GROUP BY e.id, c.id, u.id
+       GROUP BY e.id, e.status, e.created_at, c.id, c.title, c.slug, c.description, c.category, c.level, c.thumbnail_url, c.instructor_id, u.id, u.full_name
        ORDER BY e.created_at DESC`,
-      [getUserId(req)]
+      [getUserId(req)],
     );
 
     return res.json({ success: true, data: result.rows });
@@ -176,7 +175,7 @@ async function getCourseEnrollments(req, res, next) {
     const courseResult = await pool.query(
       `SELECT id, instructor_id, title
        FROM courses WHERE id = $1`,
-      [courseId]
+      [courseId],
     );
 
     const course = courseResult.rows[0];
@@ -222,9 +221,9 @@ async function getCourseEnrollments(req, res, next) {
        LEFT JOIN lesson_progress lp
          ON lp.lesson_id = l.id AND lp.enrollment_id = e.id
        WHERE e.course_id = $1 ${studentFilter}
-       GROUP BY e.id, u.id
+       GROUP BY e.id, e.student_id, e.course_id, e.status, e.created_at, e.updated_at, u.id, u.full_name, u.email
        ORDER BY e.created_at DESC`,
-      params
+      params,
     );
 
     return res.json({ success: true, data: result.rows });
@@ -248,7 +247,7 @@ async function updateEnrollmentStatus(req, res, next) {
     return errorResponse(
       res,
       400,
-      "Status must be active or cancelled. Completion is calculated automatically."
+      "Status must be active or cancelled. Completion is calculated automatically.",
     );
   }
 
@@ -259,7 +258,7 @@ async function updateEnrollmentStatus(req, res, next) {
        FROM enrollments e
        JOIN courses c ON c.id = e.course_id
        WHERE e.id = $1`,
-      [id]
+      [id],
     );
 
     const enrollment = result.rows[0];
@@ -281,14 +280,14 @@ async function updateEnrollmentStatus(req, res, next) {
 
     const course = await pool.query(
       `SELECT status FROM courses WHERE id = $1`,
-      [enrollment.course_id]
+      [enrollment.course_id],
     );
 
     if (status === "active" && course.rows[0]?.status !== "published") {
       return errorResponse(
         res,
         400,
-        "Only enrollments in published courses can be activated."
+        "Only enrollments in published courses can be activated.",
       );
     }
 
@@ -297,7 +296,7 @@ async function updateEnrollmentStatus(req, res, next) {
       return errorResponse(
         res,
         409,
-        "A completed enrollment cannot be reactivated manually."
+        "A completed enrollment cannot be reactivated manually.",
       );
     }
 
@@ -307,7 +306,7 @@ async function updateEnrollmentStatus(req, res, next) {
        WHERE id = $2
        RETURNING id, student_id, course_id, status,
                  created_at, updated_at`,
-      [status, id]
+      [status, id],
     );
 
     return res.json({

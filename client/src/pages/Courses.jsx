@@ -62,8 +62,7 @@ function getErrorMessage(error) {
   }
 
   return (
-    error.response?.data?.message ||
-    "Something went wrong. Please try again."
+    error.response?.data?.message || "Something went wrong. Please try again."
   );
 }
 
@@ -202,7 +201,10 @@ function CourseForm({ initialCourse, onClose, onSave, saving }) {
           )}
 
           <div>
-            <label htmlFor="course-title" className="mb-2 block text-sm font-medium">
+            <label
+              htmlFor="course-title"
+              className="mb-2 block text-sm font-medium"
+            >
               Course title *
             </label>
             <input
@@ -219,7 +221,10 @@ function CourseForm({ initialCourse, onClose, onSave, saving }) {
           </div>
 
           <div>
-            <label htmlFor="course-description" className="mb-2 block text-sm font-medium">
+            <label
+              htmlFor="course-description"
+              className="mb-2 block text-sm font-medium"
+            >
               Description *
             </label>
             <textarea
@@ -238,7 +243,10 @@ function CourseForm({ initialCourse, onClose, onSave, saving }) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="course-category" className="mb-2 block text-sm font-medium">
+              <label
+                htmlFor="course-category"
+                className="mb-2 block text-sm font-medium"
+              >
                 Category *
               </label>
               <input
@@ -255,7 +263,10 @@ function CourseForm({ initialCourse, onClose, onSave, saving }) {
             </div>
 
             <div>
-              <label htmlFor="course-level" className="mb-2 block text-sm font-medium">
+              <label
+                htmlFor="course-level"
+                className="mb-2 block text-sm font-medium"
+              >
                 Difficulty level *
               </label>
               <select
@@ -274,7 +285,10 @@ function CourseForm({ initialCourse, onClose, onSave, saving }) {
             </div>
 
             <div>
-              <label htmlFor="course-price" className="mb-2 block text-sm font-medium">
+              <label
+                htmlFor="course-price"
+                className="mb-2 block text-sm font-medium"
+              >
                 Price (USD)
               </label>
               <input
@@ -292,7 +306,10 @@ function CourseForm({ initialCourse, onClose, onSave, saving }) {
             </div>
 
             <div>
-              <label htmlFor="course-status" className="mb-2 block text-sm font-medium">
+              <label
+                htmlFor="course-status"
+                className="mb-2 block text-sm font-medium"
+              >
                 Status
               </label>
               <select
@@ -312,7 +329,10 @@ function CourseForm({ initialCourse, onClose, onSave, saving }) {
           </div>
 
           <div>
-            <label htmlFor="course-thumbnail" className="mb-2 block text-sm font-medium">
+            <label
+              htmlFor="course-thumbnail"
+              className="mb-2 block text-sm font-medium"
+            >
               Thumbnail image URL (optional)
             </label>
             <div className="relative">
@@ -401,20 +421,38 @@ function CourseCard({ course, canManage, onEdit, onDelete, onArchive }) {
           {course.description}
         </p>
 
-        <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-4 text-sm text-slate-400">
-          <GraduationCap className="h-4 w-4 shrink-0 text-indigo-300" />
-          <span className="truncate">
-            {course.instructor_name || "Course instructor"}
-          </span>
+        <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4 text-sm">
+          <div className="flex items-center gap-2 text-slate-400">
+            <GraduationCap className="h-4 w-4 shrink-0 text-indigo-300" />
+            <span className="truncate">
+              {course.instructor_name || "Course instructor"}
+            </span>
+          </div>
+          {course.enrollment_count > 0 && (
+            <div className="flex items-center gap-1 text-slate-500">
+              <Users className="h-3.5 w-3.5" />
+              <span className="text-xs">{course.enrollment_count}</span>
+            </div>
+          )}
         </div>
 
-        <Link
-          to={`/courses/${course.id}/learn`}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-500/10 px-4 py-3 text-sm font-semibold text-indigo-200 transition hover:bg-indigo-500 hover:text-white"
-        >
-          <BookOpen className="h-4 w-4" />
-          View curriculum
-        </Link>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <Link
+            to={`/courses/${course.id}/detail`}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-700"
+          >
+            <BookOpen className="h-4 w-4" />
+            Details
+          </Link>
+
+          <Link
+            to={`/courses/${course.id}/learn`}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-500/10 px-4 py-3 text-sm font-semibold text-indigo-200 transition hover:bg-indigo-500 hover:text-white"
+          >
+            <BookOpen className="h-4 w-4" />
+            Curriculum
+          </Link>
+        </div>
 
         {!canManage && course.status === "published" && (
           <div className="mt-4">
@@ -507,7 +545,15 @@ export default function Courses() {
       status: canManage ? filters.status || undefined : undefined,
       sort: filters.sort,
     }),
-    [page, appliedSearch, filters.category, filters.level, filters.status, filters.sort, canManage]
+    [
+      page,
+      appliedSearch,
+      filters.category,
+      filters.level,
+      filters.status,
+      filters.sort,
+      canManage,
+    ],
   );
 
   const loadCourses = useCallback(async () => {
@@ -517,12 +563,14 @@ export default function Courses() {
     try {
       const result = await getCourses(queryParams);
       setCourses(result.courses || []);
-      setPagination(result.pagination || {
-        page: 1,
-        limit: 12,
-        total: 0,
-        totalPages: 0,
-      });
+      setPagination(
+        result.pagination || {
+          page: 1,
+          limit: 12,
+          total: 0,
+          totalPages: 0,
+        },
+      );
     } catch (loadError) {
       setError(getErrorMessage(loadError));
     } finally {
@@ -588,7 +636,7 @@ export default function Courses() {
 
   async function handleArchive(course) {
     const confirmed = window.confirm(
-      `Archive "${course.title}"? It will no longer appear in the student catalog.`
+      `Archive "${course.title}"? It will no longer appear in the student catalog.`,
     );
 
     if (!confirmed) return;
@@ -607,7 +655,7 @@ export default function Courses() {
 
   async function handleDelete(course) {
     const confirmed = window.confirm(
-      `Permanently delete "${course.title}"? Courses with related learning records cannot be deleted.`
+      `Permanently delete "${course.title}"? Courses with related learning records cannot be deleted.`,
     );
 
     if (!confirmed) return;
@@ -625,8 +673,11 @@ export default function Courses() {
   }
 
   const categories = useMemo(
-    () => [...new Set(courses.map((course) => course.category).filter(Boolean))].sort(),
-    [courses]
+    () =>
+      [
+        ...new Set(courses.map((course) => course.category).filter(Boolean)),
+      ].sort(),
+    [courses],
   );
 
   return (
@@ -670,8 +721,8 @@ export default function Courses() {
               </h1>
 
               <p className="mt-4 leading-7 text-slate-300">
-                Explore learning opportunities, find the right level, and
-                build your skills with LearnSphere.
+                Explore learning opportunities, find the right level, and build
+                your skills with LearnSphere.
               </p>
             </div>
 
@@ -689,7 +740,10 @@ export default function Courses() {
         </section>
 
         <section className="mt-8 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:p-5">
-          <form onSubmit={handleSearch} className="grid gap-3 lg:grid-cols-[minmax(220px,2fr)_1fr_1fr_1fr_auto]">
+          <form
+            onSubmit={handleSearch}
+            className="grid gap-3 lg:grid-cols-[minmax(220px,2fr)_1fr_1fr_1fr_auto]"
+          >
             <div className="relative">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
               <input
@@ -792,18 +846,48 @@ export default function Courses() {
           )}
         </section>
 
+        {/* Category Browser */}
+        {!canManage && categories.length > 0 && (
+          <section className="mt-6 rounded-2xl border border-white/10 bg-slate-900/40 p-5">
+            <h3 className="mb-4 text-sm font-semibold uppercase text-slate-400">
+              Browse by category
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {categories.map((category) => (
+                <Link
+                  key={category}
+                  to={`/courses/category/${encodeURIComponent(category)}`}
+                  className="rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-indigo-400/30 hover:bg-indigo-500/10 hover:text-indigo-300"
+                >
+                  {category}
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {notice && (
-          <div role="status" className="mt-5 flex items-center gap-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200">
+          <div
+            role="status"
+            className="mt-5 flex items-center gap-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200"
+          >
             <CheckCircle2 className="h-5 w-5 shrink-0" />
             {notice}
           </div>
         )}
 
         {error && (
-          <div role="alert" className="mt-5 flex items-start gap-3 rounded-xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-200">
+          <div
+            role="alert"
+            className="mt-5 flex items-start gap-3 rounded-xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-200"
+          >
             <AlertCircle className="h-5 w-5 shrink-0" />
             <span className="flex-1">{error}</span>
-            <button type="button" onClick={() => setError("")} aria-label="Dismiss error">
+            <button
+              type="button"
+              onClick={() => setError("")}
+              aria-label="Dismiss error"
+            >
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -814,7 +898,8 @@ export default function Courses() {
             <div>
               <h2 className="text-2xl font-bold">Course catalog</h2>
               <p className="mt-1 text-sm text-slate-400">
-                {pagination.total} {pagination.total === 1 ? "course" : "courses"} found
+                {pagination.total}{" "}
+                {pagination.total === 1 ? "course" : "courses"} found
               </p>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -863,7 +948,10 @@ export default function Courses() {
           )}
 
           {!loading && pagination.totalPages > 1 && (
-            <nav aria-label="Course pages" className="mt-8 flex items-center justify-center gap-4">
+            <nav
+              aria-label="Course pages"
+              className="mt-8 flex items-center justify-center gap-4"
+            >
               <button
                 type="button"
                 disabled={page <= 1}
@@ -879,7 +967,11 @@ export default function Courses() {
               <button
                 type="button"
                 disabled={page >= pagination.totalPages}
-                onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
+                onClick={() =>
+                  setPage((current) =>
+                    Math.min(pagination.totalPages, current + 1),
+                  )
+                }
                 className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-40 hover:bg-white/5"
               >
                 Next

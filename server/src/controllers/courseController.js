@@ -21,9 +21,11 @@ function isManager(user) {
 }
 
 function canManageCourse(user, course) {
-  return user.role === "admin" ||
+  return (
+    user.role === "admin" ||
     (user.role === "instructor" &&
-      String(course.instructor_id) === String(user.id));
+      String(course.instructor_id) === String(user.id))
+  );
 }
 
 function parsePositiveInteger(value, fallback, max = Number.MAX_SAFE_INTEGER) {
@@ -41,8 +43,11 @@ function validateCourseInput(body, { partial = false } = {}) {
   const data = {};
 
   if (!partial || body.title !== undefined) {
-    if (typeof body.title !== "string" || body.title.trim().length < 3 ||
-        body.title.trim().length > 200) {
+    if (
+      typeof body.title !== "string" ||
+      body.title.trim().length < 3 ||
+      body.title.trim().length > 200
+    ) {
       errors.push("Title must contain between 3 and 200 characters.");
     } else {
       data.title = body.title.trim();
@@ -50,9 +55,11 @@ function validateCourseInput(body, { partial = false } = {}) {
   }
 
   if (!partial || body.description !== undefined) {
-    if (typeof body.description !== "string" ||
-        body.description.trim().length < 10 ||
-        body.description.trim().length > 20000) {
+    if (
+      typeof body.description !== "string" ||
+      body.description.trim().length < 10 ||
+      body.description.trim().length > 20000
+    ) {
       errors.push("Description must contain between 10 and 20,000 characters.");
     } else {
       data.description = body.description.trim();
@@ -60,9 +67,11 @@ function validateCourseInput(body, { partial = false } = {}) {
   }
 
   if (!partial || body.category !== undefined) {
-    if (typeof body.category !== "string" ||
-        body.category.trim().length < 2 ||
-        body.category.trim().length > 100) {
+    if (
+      typeof body.category !== "string" ||
+      body.category.trim().length < 2 ||
+      body.category.trim().length > 100
+    ) {
       errors.push("Category must contain between 2 and 100 characters.");
     } else {
       data.category = body.category.trim();
@@ -72,11 +81,11 @@ function validateCourseInput(body, { partial = false } = {}) {
   if (!partial || body.level !== undefined) {
     const level = body.level;
 
-    if (typeof level !== "string" ||
-        !ALLOWED_LEVELS.includes(level.trim().toLowerCase())) {
-      errors.push(
-        `Level must be one of: ${ALLOWED_LEVELS.join(", ")}.`
-      );
+    if (
+      typeof level !== "string" ||
+      !ALLOWED_LEVELS.includes(level.trim().toLowerCase())
+    ) {
+      errors.push(`Level must be one of: ${ALLOWED_LEVELS.join(", ")}.`);
     } else {
       data.level = level.trim().toLowerCase();
     }
@@ -111,11 +120,11 @@ function validateCourseInput(body, { partial = false } = {}) {
   if (body.status !== undefined || !partial) {
     const status = body.status === undefined ? "draft" : body.status;
 
-    if (typeof status !== "string" ||
-        !ALLOWED_STATUSES.includes(status.trim().toLowerCase())) {
-      errors.push(
-        `Status must be one of: ${ALLOWED_STATUSES.join(", ")}.`
-      );
+    if (
+      typeof status !== "string" ||
+      !ALLOWED_STATUSES.includes(status.trim().toLowerCase())
+    ) {
+      errors.push(`Status must be one of: ${ALLOWED_STATUSES.join(", ")}.`);
     } else {
       data.status = status.trim().toLowerCase();
     }
@@ -151,12 +160,11 @@ async function generateUniqueSlug(title, excludeCourseId = null) {
           `SELECT id FROM courses
            WHERE slug = $1 AND id <> $2
            LIMIT 1`,
-          [candidate, excludeCourseId]
+          [candidate, excludeCourseId],
         )
-      : await pool.query(
-          "SELECT id FROM courses WHERE slug = $1 LIMIT 1",
-          [candidate]
-        );
+      : await pool.query("SELECT id FROM courses WHERE slug = $1 LIMIT 1", [
+          candidate,
+        ]);
 
     if (result.rowCount === 0) return candidate;
 
@@ -174,33 +182,36 @@ function buildFilters(query, user) {
     conditions.push(sql.replace("?", `$${values.length}`));
   }
 
-  const search = typeof query.search === "string"
-    ? query.search.trim().slice(0, 100)
-    : "";
+  const search =
+    typeof query.search === "string" ? query.search.trim().slice(0, 100) : "";
 
   if (search) {
     addCondition(
-      "(c.title ILIKE ? OR c.description ILIKE ? OR c.category ILIKE ?)",
-      `%${search}%`
+      "(c.title ILIKE ? OR c.description ILIKE ? OR c.category ILIKE ? OR u.full_name ILIKE ?)",
+      `%${search}%`,
     );
     const placeholder = `$${values.length}`;
     conditions[conditions.length - 1] =
-      `(c.title ILIKE ${placeholder} OR c.description ILIKE ${placeholder} OR c.category ILIKE ${placeholder})`;
+      `(c.title ILIKE ${placeholder} OR c.description ILIKE ${placeholder} OR c.category ILIKE ${placeholder} OR u.full_name ILIKE ${placeholder})`;
   }
 
   if (typeof query.category === "string" && query.category.trim()) {
     addCondition("c.category ILIKE ?", query.category.trim().slice(0, 100));
   }
 
-  if (typeof query.level === "string" &&
-      ALLOWED_LEVELS.includes(query.level.trim().toLowerCase())) {
+  if (
+    typeof query.level === "string" &&
+    ALLOWED_LEVELS.includes(query.level.trim().toLowerCase())
+  ) {
     addCondition("c.level = ?", query.level.trim().toLowerCase());
   }
 
   if (user.role === "student") {
     conditions.push("c.status = 'published'");
-  } else if (query.status &&
-      ALLOWED_STATUSES.includes(String(query.status).toLowerCase())) {
+  } else if (
+    query.status &&
+    ALLOWED_STATUSES.includes(String(query.status).toLowerCase())
+  ) {
     addCondition("c.status = ?", String(query.status).toLowerCase());
   }
 
@@ -240,22 +251,29 @@ async function listCourses(req, res) {
 
     const countResult = await pool.query(
       `SELECT COUNT(*)::int AS total
-       FROM courses c ${filters.where}`,
-      filters.values
+       FROM courses c
+       JOIN users u ON u.id = c.instructor_id
+       ${filters.where}`,
+      filters.values,
     );
 
     const result = await pool.query(
       `SELECT c.id, c.instructor_id, c.title, c.slug, c.description,
               c.category, c.level, c.thumbnail_url, c.price, c.status,
               c.published_at, c.created_at, c.updated_at,
-              u.full_name AS instructor_name
+              u.full_name AS instructor_name, u.avatar_url AS instructor_avatar,
+              COUNT(e.id)::int AS enrollment_count
        FROM courses c
        JOIN users u ON u.id = c.instructor_id
+       LEFT JOIN enrollments e ON e.course_id = c.id AND e.status IN ('active', 'completed')
        ${filters.where}
+       GROUP BY c.id, c.instructor_id, c.title, c.slug, c.description, c.category, 
+                c.level, c.thumbnail_url, c.price, c.status, c.published_at, 
+                c.created_at, c.updated_at, u.id, u.full_name, u.avatar_url
        ORDER BY ${sort}
        LIMIT $${filters.values.length + 1}
        OFFSET $${filters.values.length + 2}`,
-      [...filters.values, limit, offset]
+      [...filters.values, limit, offset],
     );
 
     const total = countResult.rows[0].total;
@@ -287,12 +305,22 @@ async function getCourseById(req, res) {
       `SELECT c.id, c.instructor_id, c.title, c.slug, c.description,
               c.category, c.level, c.thumbnail_url, c.price, c.status,
               c.published_at, c.created_at, c.updated_at,
-              u.full_name AS instructor_name
+              u.id AS instructor_id, u.full_name AS instructor_name, 
+              u.avatar_url AS instructor_avatar, u.bio AS instructor_bio,
+              COUNT(DISTINCT e.id)::int AS enrollment_count,
+              COUNT(DISTINCT m.id)::int AS module_count,
+              COUNT(DISTINCT l.id)::int AS lesson_count
        FROM courses c
        JOIN users u ON u.id = c.instructor_id
+       LEFT JOIN enrollments e ON e.course_id = c.id AND e.status IN ('active', 'completed')
+       LEFT JOIN modules m ON m.course_id = c.id
+       LEFT JOIN lessons l ON l.module_id = m.id
        WHERE c.id = $1
+       GROUP BY c.id, c.instructor_id, c.title, c.slug, c.description, c.category,
+                c.level, c.thumbnail_url, c.price, c.status, c.published_at,
+                c.created_at, c.updated_at, u.id, u.full_name, u.avatar_url, u.bio
        LIMIT 1`,
-      [id]
+      [id],
     );
 
     const course = result.rows[0];
@@ -304,17 +332,42 @@ async function getCourseById(req, res) {
       });
     }
 
-    if (course.status !== "published" &&
-        !canManageCourse(req.user, course)) {
+    if (course.status !== "published" && !canManageCourse(req.user, course)) {
       return res.status(404).json({
         success: false,
         message: "Course not found.",
       });
     }
 
+    // Fetch modules and lessons for the course overview
+    const modulesResult = await pool.query(
+      `SELECT m.id, m.title, m.description, m.position,
+              COUNT(l.id)::int AS lesson_count
+       FROM modules m
+       LEFT JOIN lessons l ON l.module_id = m.id
+       WHERE m.course_id = $1
+       GROUP BY m.id, m.title, m.description, m.position
+       ORDER BY m.position`,
+      [id],
+    );
+
     return res.status(200).json({
       success: true,
-      course: publicCourse(course),
+      course: {
+        ...publicCourse(course),
+        instructor: {
+          id: course.instructor_id,
+          name: course.instructor_name,
+          avatar: course.instructor_avatar,
+          bio: course.instructor_bio,
+        },
+        stats: {
+          enrollmentCount: course.enrollment_count,
+          moduleCount: course.module_count,
+          lessonCount: course.lesson_count,
+        },
+        modules: modulesResult.rows,
+      },
     });
   } catch (error) {
     console.error("Get course error:", error.message);
@@ -369,7 +422,7 @@ async function createCourse(req, res) {
         data.price,
         data.status,
         publishedAt,
-      ]
+      ],
     );
 
     return res.status(201).json({
@@ -381,7 +434,8 @@ async function createCourse(req, res) {
     if (error.code === "23505") {
       return res.status(409).json({
         success: false,
-        message: "A course with this slug already exists. Try a different title.",
+        message:
+          "A course with this slug already exists. Try a different title.",
       });
     }
 
@@ -398,7 +452,7 @@ async function updateCourse(req, res) {
     const { id } = req.params;
     const found = await pool.query(
       "SELECT id, instructor_id, status FROM courses WHERE id = $1",
-      [id]
+      [id],
     );
 
     const existing = found.rows[0];
@@ -444,10 +498,7 @@ async function updateCourse(req, res) {
 
     if (data.title !== undefined) {
       setField("title", data.title);
-      setField(
-        "slug",
-        await generateUniqueSlug(data.title, id)
-      );
+      setField("slug", await generateUniqueSlug(data.title, id));
     }
 
     for (const field of [
@@ -479,7 +530,7 @@ async function updateCourse(req, res) {
        RETURNING id, instructor_id, title, slug, description, category,
                  level, thumbnail_url, price, status, published_at,
                  created_at, updated_at`,
-      values
+      values,
     );
 
     return res.status(200).json({
@@ -509,7 +560,7 @@ async function deleteCourse(req, res) {
 
     const found = await pool.query(
       "SELECT id, instructor_id FROM courses WHERE id = $1",
-      [id]
+      [id],
     );
 
     const course = found.rows[0];
@@ -553,10 +604,90 @@ async function deleteCourse(req, res) {
   }
 }
 
+async function listCategories(req, res) {
+  try {
+    // Get all unique categories with course counts (published courses visible to students)
+    const result = await pool.query(
+      `SELECT DISTINCT c.category, COUNT(*)::int AS course_count
+       FROM courses c
+       WHERE c.status = 'published'
+       AND c.category IS NOT NULL
+       AND c.category != ''
+       GROUP BY c.category
+       ORDER BY c.category ASC`,
+    );
+
+    return res.status(200).json({
+      success: true,
+      categories: result.rows,
+    });
+  } catch (error) {
+    console.error("List categories error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to load categories.",
+    });
+  }
+}
+
+async function getCategories(req, res) {
+  try {
+    // Role-aware category listing
+    let query;
+    const user = req.user;
+
+    if (user.role === "student") {
+      // Students see only categories with published courses
+      query = `SELECT DISTINCT c.category, COUNT(*)::int AS course_count
+               FROM courses c
+               WHERE c.status = 'published'
+               AND c.category IS NOT NULL
+               AND c.category != ''
+               GROUP BY c.category
+               ORDER BY c.category ASC`;
+    } else if (user.role === "instructor") {
+      // Instructors see categories from their own courses
+      query = `SELECT DISTINCT c.category, COUNT(*)::int AS course_count
+               FROM courses c
+               WHERE c.instructor_id = $1
+               AND c.category IS NOT NULL
+               AND c.category != ''
+               GROUP BY c.category
+               ORDER BY c.category ASC`;
+    } else {
+      // Admins see all categories
+      query = `SELECT DISTINCT c.category, COUNT(*)::int AS course_count
+               FROM courses c
+               WHERE c.category IS NOT NULL
+               AND c.category != ''
+               GROUP BY c.category
+               ORDER BY c.category ASC`;
+    }
+
+    const result = await pool.query(
+      query,
+      user.role === "instructor" ? [user.id] : [],
+    );
+
+    return res.status(200).json({
+      success: true,
+      categories: result.rows,
+    });
+  } catch (error) {
+    console.error("Get categories error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to load categories.",
+    });
+  }
+}
+
 module.exports = {
   listCourses,
   getCourseById,
   createCourse,
   updateCourse,
   deleteCourse,
+  listCategories,
+  getCategories,
 };

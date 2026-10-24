@@ -1,0 +1,148 @@
+{
+  "planHash": "4ae8afa104e84c35b2ee710b3fceba6849aa50cc40ada0a0ad6f543c41e68dfe",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-10-23T20:50:27.6524561Z",
+  "retryCount": 1,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "server-entry-syntax",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "",
+        "durationMs": 792
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E server@1.0.0 test\r\n\u003E node --test\r\n\r\n\u25C7 injected env (10) from .env\r\n\u25C7 injected env (0) from .env\r\n\u25C7 injected env (0) from .env\r\n\u25B6 analytics endpoint enforces authentication and role-scoped data access\r\n  \u2714 rejects unauthenticated requests (122.0729ms)\r\n  \u2714 students see only their own enrollment, progress, and submissions (728.5661ms)\r\n  \u2714 instructors see only courses and assignment statistics they own (161.3079ms)\r\n  \u2714 instructor student analytics is authenticated and owner-scoped (99.9782ms)\r\n  \u2714 administrators receive platform-wide summary counts (55.3591ms)\r\n  \u2714 denies unexpected roles without querying analytics data (0.5715ms)\r\n\u2714 analytics endpoint enforces authentication and role-scoped data access (1413.9986ms)\r\n\u25C7 injected env (10) from .env\r\n\u25C7 injected env (0) from .env\r\n\u25C7 injected env (0) from .env\r\n\u25B6 notification API enforces ownership and assignment grading alerts\r\n  \u2714 requires authentication and validates inputs (164.5105ms)\r\n  \u2714 returns an empty list and zero unread count (182.3098ms)\r\n  \u2714 paginates only the authenticated user\u0027s notifications (30.9927ms)\r\n  \u2714 prevents reading or deleting another user\u0027s notification (38.4237ms)\r\n  \u2714 marks one and all as read, counts unread, and deletes owned alerts (59.4713ms)\r\n  \u2714 creates one student-owned notification only after grading succeeds (326.02ms)\r\n  \u2714 notification insertion failure does not fail a saved grade (45.5339ms)\r\n\u2714 notification API enforces ownership and assignment grading alerts (1066.466ms)\r\n\u2139 tests 15\r\n\u2139 suites 0\r\n\u2139 pass 15\r\n\u2139 fail 0\r\n\u2139 cancelled 0\r\n\u2139 skipped 0\r\n\u2139 todo 0\r\n\u2139 duration_ms 3713.5334\r\n",
+        "durationMs": 5503,
+        "testResults": {
+          "testFramework": "unknown",
+          "runnerDetectedFrom": "none",
+          "testsTotal": 0,
+          "testsPassed": 0,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": true
+        }
+      },
+      {
+        "name": "health-endpoint-200",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n{\u0022success\u0022:true,\u0022message\u0022:\u0022LearnSphere LMS API is running\u0022,\u0022database\u0022:\u0022connected\u0022,\u0022databaseName\u0022:\u0022learnsphere_lms\u0022,\u0022serverTime\u0022:\u00222026-10-23T20:50:27.431Z\u0022}",
+        "durationMs": 284
+      },
+      {
+        "name": "current-user-requires-authentication",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 401\n{\u0022success\u0022:false,\u0022message\u0022:\u0022Authentication required. Please log in.\u0022}",
+        "durationMs": 12
+      },
+      {
+        "name": "analytics-requires-authentication",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 401\n{\u0022success\u0022:false,\u0022message\u0022:\u0022Authentication required. Please log in.\u0022}",
+        "durationMs": 55
+      }
+    ],
+    "executions": [
+      {
+        "source": "server-entry-syntax",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\node.EXE",
+        "args": [
+          "--check",
+          "src/server.js"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\server",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "test"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\server",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "health-endpoint-200",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "start"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\server",
+        "env": {
+          "PORT": "54871"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "current-user-requires-authentication",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "start"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\server",
+        "env": {
+          "PORT": "54871"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "analytics-requires-authentication",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "start"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\server",
+        "env": {
+          "PORT": "54871"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

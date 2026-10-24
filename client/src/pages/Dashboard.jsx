@@ -60,11 +60,12 @@ export default function Dashboard() {
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500">
               <BookOpen className="h-5 w-5" />
             </span>
-            <span className="text-lg font-bold tracking-tight">LearnSphere</span>
+            <span className="text-lg font-bold tracking-tight">
+              LearnSphere
+            </span>
           </Link>
 
           <div className="flex items-center gap-3">
-            <NotificationBell />
             <NavLink
               to="/analytics"
               className={({ isActive }) =>
@@ -142,9 +143,9 @@ export default function Dashboard() {
             </h1>
 
             <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-              Your LearnSphere account is ready. Soon, you’ll be able to
-              explore courses, study lessons, complete quizzes, and track
-              your learning progress from one place.
+              Your LearnSphere account is ready. Soon, you’ll be able to explore
+              courses, study lessons, complete quizzes, and track your learning
+              progress from one place.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -164,10 +165,13 @@ export default function Dashboard() {
         <section className="mt-10">
           <div className="mb-6 flex items-end justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-indigo-300">YOUR WORKSPACE</p>
+              <p className="text-sm font-semibold text-indigo-300">
+                YOUR WORKSPACE
+              </p>
               <h2 className="mt-2 text-2xl font-bold">Continue your journey</h2>
               <p className="mt-2 text-sm text-slate-400">
-                Your learning tools will be enabled as we build the next modules.
+                Your learning tools will be enabled as we build the next
+                modules.
               </p>
             </div>
             <LayoutDashboard className="hidden h-8 w-8 text-slate-600 sm:block" />
@@ -218,19 +222,23 @@ export default function Dashboard() {
               <div>
                 <h2 className="font-semibold">Instructor workspace</h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Instructor course management will be added in the course module.
+                  Instructor course management will be added in the course
+                  module.
                 </p>
               </div>
             </div>
           </section>
         )}
 
-        <footer className="mt-12 flex flex-col justify-between gap-3 border-t border-white/10 pt-6 text-sm text-slate-500 sm:flex-row">
+        <footer className="relative mt-12 flex flex-col justify-between gap-3 border-t border-white/10 pt-6 text-sm text-slate-500 sm:flex-row">
           <p>© {new Date().getFullYear()} LearnSphere LMS</p>
           <p className="flex items-center gap-2">
             Made for lifelong learners
             <ArrowRight className="h-4 w-4" />
           </p>
+          <div className="absolute bottom-6 left-5 sm:left-8">
+            <NotificationBell />
+          </div>
         </footer>
       </main>
     </div>

@@ -53,17 +53,27 @@ export default function Login() {
     setSubmitting(true);
 
     try {
-      await login({
+      const authenticatedUser = await login({
         email: form.email.trim(),
         password: form.password,
       });
+
+      // Redirect based on user role
+      let dashboardPath = "/dashboard";
+      if (authenticatedUser?.role === "admin") {
+        dashboardPath = "/admin-dashboard";
+      } else if (authenticatedUser?.role === "instructor") {
+        dashboardPath = "/instructor-dashboard";
+      } else if (authenticatedUser?.role === "student") {
+        dashboardPath = "/student-dashboard";
+      }
 
       const requestedPath = location.state?.from?.pathname;
       navigate(
         requestedPath && requestedPath !== "/login"
           ? requestedPath
-          : "/dashboard",
-        { replace: true }
+          : dashboardPath,
+        { replace: true },
       );
     } catch (requestError) {
       setError(getErrorMessage(requestError));

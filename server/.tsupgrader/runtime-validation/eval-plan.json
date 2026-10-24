@@ -1,0 +1,64 @@
+{
+  "generatedAt": "2026-10-23T20:15:00Z",
+  "generatedOnPlatform": "win32",
+  "projectType": "server",
+  "assertions": [
+    {
+      "name": "server-entry-syntax",
+      "kind": "process",
+      "command": "node",
+      "args": ["--check", "src/server.js"],
+      "verificationMethod": "exit-code",
+      "expected": "0",
+      "timeoutSeconds": 60
+    },
+    {
+      "name": "tests-pass",
+      "kind": "process",
+      "command": "npm",
+      "args": ["test"],
+      "verificationMethod": "test-results",
+      "expected": "0",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "health-endpoint-200",
+      "kind": "http-probe",
+      "startCommand": "npm",
+      "startArgs": ["start"],
+      "env": {
+        "PORT": "54871"
+      },
+      "url": "http://127.0.0.1:54871/api/health",
+      "verificationMethod": "http-status",
+      "expected": "200",
+      "timeoutSeconds": 90
+    },
+    {
+      "name": "current-user-requires-authentication",
+      "kind": "http-probe",
+      "startCommand": "npm",
+      "startArgs": ["start"],
+      "env": {
+        "PORT": "54871"
+      },
+      "url": "http://127.0.0.1:54871/api/auth/me",
+      "verificationMethod": "http-status",
+      "expected": "401",
+      "timeoutSeconds": 90
+    },
+    {
+      "name": "analytics-requires-authentication",
+      "kind": "http-probe",
+      "startCommand": "npm",
+      "startArgs": ["start"],
+      "env": {
+        "PORT": "54871"
+      },
+      "url": "http://127.0.0.1:54871/api/analytics/overview",
+      "verificationMethod": "http-status",
+      "expected": "401",
+      "timeoutSeconds": 90
+    }
+  ]
+}

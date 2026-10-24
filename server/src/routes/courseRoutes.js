@@ -32,6 +32,9 @@ const validateCourseId = [
 
 router.use(authenticate);
 
+// Public category endpoint (no specific auth role required)
+router.get("/categories", courseController.getCategories);
+
 // All authenticated roles can browse, but the controller restricts
 // students to published courses and instructors to their own courses.
 router.get("/", courseController.listCourses);
@@ -40,21 +43,21 @@ router.get("/:id", validateCourseId, courseController.getCourseById);
 router.post(
   "/",
   authorize("instructor", "admin"),
-  courseController.createCourse
+  courseController.createCourse,
 );
 
 router.patch(
   "/:id",
   authorize("instructor", "admin"),
   validateCourseId,
-  courseController.updateCourse
+  courseController.updateCourse,
 );
 
 router.delete(
   "/:id",
   authorize("instructor", "admin"),
   validateCourseId,
-  courseController.deleteCourse
+  courseController.deleteCourse,
 );
 
 module.exports = router;

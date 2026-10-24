@@ -10,6 +10,11 @@ export async function getCourseById(id) {
   return response.data;
 }
 
+export async function getCategories() {
+  const response = await api.get("/courses/categories");
+  return response.data;
+}
+
 export async function createCourse(course) {
   const response = await api.post("/courses", course);
   return response.data;

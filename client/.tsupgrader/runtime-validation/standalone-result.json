@@ -1,0 +1,127 @@
+{
+  "planHash": "2f92e6940496edf35158a57da5f362d80e4e27a4df037e19aaf66d158b4ad710",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-10-23T20:52:28.7197315Z",
+  "retryCount": 2,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "production-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E client@0.0.0 build\r\n\u003E vite build\r\n\r\n\u001B[36mvite v8.3.5 \u001B[32mbuilding client environment for production...\u001B[36m\u001B[39m\r\ntransforming...\r\n\u2713 2023 modules transformed.\r\nrendering chunks...\r\ncomputing gzip size...\r\ndist/index.html                   0.48 kB \u2502 gzip:   0.31 kB\r\ndist/assets/index-sxaRzBzN.css   62.51 kB \u2502 gzip:  10.83 kB\r\ndist/assets/index-C5vWxP2u.js   489.46 kB \u2502 gzip: 137.66 kB\r\n\r\n\u001B[32m\u2713 built in 1.41s\u001B[39m\r\n",
+        "durationMs": 5226
+      },
+      {
+        "name": "client-lint",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": false,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 1,
+        "outputSample": "\r\n\u003E client@0.0.0 lint\r\n\u003E eslint .\r\n\r\n\r\nD:\\xampp\\htdocs\\LearnSphere-LMS\\client\\src\\components\\LessonProgressPanel.jsx\r\n  52:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders\r\n\r\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\r\n* Update external systems with the latest state from React.\r\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\r\n\r\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\r\n\r\n  50 |\r\n  51 |   useEffect(() =\u003E {\r\n\u003E 52 |     loadProgress();\r\n     |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect\r\n  53 |   }, [loadProgress]);\r\n  54 |\r\n  55 |   async function toggleCompleted() {  react-hooks/set-state-in-effect\r\n\r\nD:\\xampp\\htdocs\\LearnSphere-LMS\\client\\src\\context\\AuthContext.jsx\r\n  116:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components\r\n\r\nD:\\xampp\\htdocs\\LearnSphere-LMS\\client\\src\\pages\\CourseContent.jsx\r\n  375:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders\r\n\r\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\r\n* Update external systems with the latest state from React.\r\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\r\n\r\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\r\n\r\n  373 |\r\n  374 |   useEffect(() =\u003E {\r\n\u003E 375 |     loadPage();\r\n      |     ^^^^^^^^ Avoid calling setState() directly within an effect\r\n  376 |   }, [loadPage, refreshKey]);\r\n  377 |\r\n  378 |   function refresh(message) {  react-hooks/set-state-in-effect\r\n\r\nD:\\xampp\\htdocs\\LearnSphere-LMS\\client\\src\\pages\\CourseEnrollments.jsx\r\n  49:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders\r\n\r\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\r\n* Update external systems with the latest state from React.\r\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\r\n\r\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\r\n\r\n  47 |\r\n  48 |   useEffect(() =\u003E {\r\n\u003E 49 |     loadEnrollments();\r\n     |     ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect\r\n  50 |   }, [loadEnrollments]);\r\n  51 |\r\n  52 |   async function changeStatus(enrollment, status) {  react-hooks/set-state-in-effect\r\n\r\nD:\\xampp\\htdocs\\LearnSphere-LMS\\client\\src\\pages\\Courses.jsx\r\n   19:3  error  \u0027ShieldCheck\u0027 is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \n\u2026[truncated]",
+        "durationMs": 11258
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E client@0.0.0 test\r\n\u003E vitest run\r\n\r\n\r\n RUN  v5.0.5 D:/xampp/htdocs/LearnSphere-LMS/client\r\n\r\n\r\n Test Files  1 passed (1)\r\n      Tests  4 passed (4)\r\n   Start at  23:52:27\r\n   Duration  585ms (import 44%, transform 25%, tests 16%, worker 15%, environment 1%)\r\n\r\n",
+        "durationMs": 3177,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 4,
+          "testsPassed": 4,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      },
+      {
+        "name": "client-dev-server-200",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\n\u003Chtml lang=\u0022en\u0022\u003E\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\n    \u003Clink rel=\u0022icon\u0022 type=\u0022image/svg\u002Bxml\u0022 href=\u0022/favicon.svg\u0022 /\u003E\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022 /\u003E\n    \u003Ctitle\u003EOnline Learning Management System\u003C/title\u003E\n  \u003C/head\u003E\n  \u003Cbody\u003E\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.jsx?t=1792788728882\u0022\u003E\u003C/script\u003E\n  \u003C/body\u003E\n\u003C/html\u003E\n",
+        "durationMs": 35
+      }
+    ],
+    "executions": [
+      {
+        "source": "production-build",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\client",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "client-lint",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "lint"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\client",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "test"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\client",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "client-dev-server-200",
+        "resolvedExecutable": "D:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "dev",
+          "--",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "5174",
+          "--strictPort"
+        ],
+        "cwd": "D:\\xampp\\htdocs\\LearnSphere-LMS\\client",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

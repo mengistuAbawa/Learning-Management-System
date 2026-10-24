@@ -1,11 +1,15 @@
-
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import StudentDashboard from "./pages/StudentDashboardEnhanced";
+import InstructorDashboard from "./pages/InstructorDashboardEnhanced";
+import AdminDashboard from "./pages/AdminDashboardEnhanced";
 import Courses from "./pages/Courses";
 import CourseContent from "./pages/CourseContent";
+import CourseDetail from "./pages/CourseDetail";
+import CategoryPage from "./pages/CategoryPage";
 import MyLearning from "./pages/MyLearning";
 import CourseEnrollments from "./pages/CourseEnrollments";
 import QuizTake from "./pages/QuizTake";
@@ -13,6 +17,8 @@ import QuizManagement from "./pages/QuizManagement";
 import CourseAssignments from "./pages/CourseAssignments";
 import Notifications from "./pages/Notifications";
 import Analytics from "./pages/Analytics";
+import MyCertificates from "./pages/MyCertificates";
+import VerifyCertificate from "./pages/VerifyCertificate";
 
 import ProtectedRoute, {
   PageLoader,
@@ -28,12 +34,7 @@ function HomeRedirect() {
     return <PageLoader />;
   }
 
-  return (
-    <Navigate
-      to={isAuthenticated ? "/dashboard" : "/login"}
-      replace
-    />
-  );
+  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
 }
 
 function NotFound() {
@@ -44,9 +45,7 @@ function NotFound() {
           Error 404
         </p>
 
-        <h1 className="mt-4 text-4xl font-bold">
-          Page not found
-        </h1>
+        <h1 className="mt-4 text-4xl font-bold">Page not found</h1>
 
         <p className="mt-3 text-slate-400">
           The page you are looking for does not exist.
@@ -71,25 +70,28 @@ export default function App() {
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/verify-certificate/:code" element={<VerifyCertificate />} />
 
       {/* Routes requiring authentication */}
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/student-dashboard" element={<StudentDashboard />} />
+        <Route path="/instructor-dashboard" element={<InstructorDashboard />} />
+        <Route path="/admin-dashboard" element={<AdminDashboard />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/certificates" element={<MyCertificates />} />
 
         {/* Courses and learning */}
         <Route path="/courses" element={<Courses />} />
-
+        <Route path="/courses/:courseId/detail" element={<CourseDetail />} />
         <Route
-          path="/courses/:courseId/learn"
-          element={<CourseContent />}
+          path="/courses/category/:categoryName"
+          element={<CategoryPage />}
         />
+        <Route path="/courses/:courseId/learn" element={<CourseContent />} />
 
-        <Route
-          path="/my-learning"
-          element={<MyLearning />}
-        />
+        <Route path="/my-learning" element={<MyLearning />} />
 
         <Route
           path="/courses/:courseId/enrollments"
@@ -97,10 +99,7 @@ export default function App() {
         />
 
         {/* Quizzes */}
-        <Route
-          path="/quizzes/:quizId/take"
-          element={<QuizTake />}
-        />
+        <Route path="/quizzes/:quizId/take" element={<QuizTake />} />
 
         <Route
           path="/courses/:courseId/quizzes/manage"
@@ -117,12 +116,12 @@ export default function App() {
           element={<CourseAssignments />}
         />
 
-        {/* Role-based dashboards */}
+        {/* Legacy role-based routes (now redirect to proper dashboards) */}
         <Route
           path="/admin"
           element={
             <RoleRoute allowedRoles={["admin"]}>
-              <Dashboard />
+              <AdminDashboard />
             </RoleRoute>
           }
         />
@@ -130,7 +129,7 @@ export default function App() {
           path="/instructor"
           element={
             <RoleRoute allowedRoles={["instructor", "admin"]}>
-              <Dashboard />
+              <InstructorDashboard />
             </RoleRoute>
           }
         />
@@ -139,7 +138,7 @@ export default function App() {
           path="/student"
           element={
             <RoleRoute allowedRoles={["student"]}>
-              <Dashboard />
+              <StudentDashboard />
             </RoleRoute>
           }
         />
