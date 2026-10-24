@@ -16,6 +16,8 @@ import {
   Eye,
   Edit2,
   PlusCircle,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -33,6 +35,9 @@ export default function InstructorDashboardEnhanced() {
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [showStudentCoursePicker, setShowStudentCoursePicker] = useState(false);
   const [quickActionError, setQuickActionError] = useState("");
+  const [darkTheme, setDarkTheme] = useState(
+    () => localStorage.getItem("learnsphere-instructor-theme") === "dark"
+  );
 
   const firstName = user?.full_name?.trim().split(/\s+/)[0] || "Instructor";
 
@@ -79,6 +84,13 @@ export default function InstructorDashboardEnhanced() {
 
     loadDashboardData();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "learnsphere-instructor-theme",
+      darkTheme ? "dark" : "light"
+    );
+  }, [darkTheme]);
 
   function handleLogout() {
     logout();
@@ -179,7 +191,11 @@ export default function InstructorDashboardEnhanced() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div
+      className={`role-dashboard min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 ${
+        darkTheme ? "role-dashboard-dark" : ""
+      }`}
+    >
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
@@ -204,6 +220,18 @@ export default function InstructorDashboardEnhanced() {
           </div>
 
           <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setDarkTheme((theme) => !theme)}
+              aria-label={`Switch to ${darkTheme ? "light" : "dark"} theme`}
+              aria-pressed={darkTheme}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              {darkTheme ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              <span className="hidden sm:inline">
+                {darkTheme ? "Light theme" : "Dark theme"}
+              </span>
+            </button>
             <Link
               to="/live-classes"
               className="rounded-lg px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50"

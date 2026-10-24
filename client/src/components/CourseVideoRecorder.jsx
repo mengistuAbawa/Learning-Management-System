@@ -590,7 +590,18 @@ export default function CourseVideoRecorder({ courses }) {
                     </div>
                   </div>
                   {playing[video.id] && (
-                    <video controls playsInline src={playing[video.id]} className="mt-3 w-full rounded-lg bg-black" />
+                    <video
+                      controls
+                      playsInline
+                      crossOrigin="anonymous"
+                      src={playing[video.id]}
+                      onError={() =>
+                        setError(
+                          "The video could not load. Check that the recording is available and try again."
+                        )
+                      }
+                      className="mt-3 w-full rounded-lg bg-black"
+                    />
                   )}
                 </li>
               ))}

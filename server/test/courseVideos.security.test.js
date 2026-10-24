@@ -346,9 +346,16 @@ test("course video recording and playback enforce ownership and enrollment", asy
     assert.equal(administrator.status, 200);
 
     const range = await fetch(streamUrl, {
-      headers: { Range: "bytes=0-3" },
+      headers: {
+        Range: "bytes=0-3",
+        Origin: "http://localhost:5173",
+      },
     });
     assert.equal(range.status, 206);
+    assert.equal(
+      range.headers.get("access-control-allow-origin"),
+      "http://localhost:5173"
+    );
     assert.equal(range.headers.get("content-range"), "bytes 0-3/7");
     assert.deepEqual(Buffer.from(await range.arrayBuffer()), Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
 

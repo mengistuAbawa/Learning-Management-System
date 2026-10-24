@@ -108,7 +108,18 @@ export default function CourseVideoLibrary() {
                 )}
               </div>
               {playing[video.id] && (
-                <video controls playsInline src={playing[video.id]} className="w-full rounded-lg bg-black" />
+                <video
+                  controls
+                  playsInline
+                  crossOrigin="anonymous"
+                  src={playing[video.id]}
+                  onError={() =>
+                    setError(
+                      "The video could not load. Check that the recording is available and try again."
+                    )
+                  }
+                  className="w-full rounded-lg bg-black"
+                />
               )}
             </li>
           ))}
