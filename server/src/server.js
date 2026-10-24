@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 
 const express = require("express");
@@ -17,6 +16,7 @@ const quizRoutes = require("./routes/quizRoutes");
 const assignmentRoutes = require("./routes/assignmentRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
+const certificateRoutes = require("./routes/certificateRoutes");
 
 const app = express();
 
@@ -25,10 +25,7 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 const allowedClientOrigins =
   process.env.NODE_ENV === "production"
     ? CLIENT_URL
-    : [
-        CLIENT_URL,
-        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
-      ];
+    : [CLIENT_URL, /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/];
 
 app.disable("x-powered-by");
 
@@ -39,11 +36,25 @@ app.use(
     origin: allowedClientOrigins,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+// Global rate limiting (applies to all /api routes, 300 requests per 15 minutes)
+const globalRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 300, // 300 requests per window
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health check (internal monitoring)
+    return req.path === "/api/health";
+  },
+});
+
+app.use("/api", globalRateLimiter);
 
 app.get("/api/health", async (req, res) => {
   try {
@@ -53,7 +64,6 @@ app.get("/api/health", async (req, res) => {
       success: true,
       message: "LearnSphere LMS API is running",
       database: "connected",
-      databaseName: database.database,
       serverTime: database.server_time,
     });
   } catch (error) {
@@ -78,16 +88,7 @@ app.use("/api", quizRoutes);
 app.use("/api", assignmentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/analytics", analyticsRoutes);
-app.use(
-  "/api",
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 300,
-    standardHeaders: "draft-7",
-    legacyHeaders: false,
-  })
-);
-
+app.use("/api/certificates", certificateRoutes);
 app.get("/", (req, res) => {
   res.json({
     success: true,
@@ -127,7 +128,7 @@ async function startServer() {
 
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
       throw new Error(
-        "JWT_SECRET must be set to a random secret of at least 32 characters."
+        "JWT_SECRET must be set to a random secret of at least 32 characters.",
       );
     }
 
@@ -141,7 +142,7 @@ async function startServer() {
     server.on("error", (error) => {
       if (error.code === "EADDRINUSE") {
         console.error(
-          `Port ${PORT} is already in use. Stop the process using it or set PORT to an available port in server/.env.`
+          `Port ${PORT} is already in use. Stop the process using it or set PORT to an available port in server/.env.`,
         );
       } else {
         console.error("Failed to start LearnSphere LMS:", error.message);
