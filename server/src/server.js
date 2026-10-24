@@ -18,6 +18,8 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
 const certificateRoutes = require("./routes/certificateRoutes");
 const liveClassRoutes = require("./routes/liveClassRoutes");
+const adminUserRoutes = require("./routes/adminUserRoutes");
+const courseVideoRoutes = require("./routes/courseVideoRoutes");
 
 const app = express();
 
@@ -79,6 +81,7 @@ app.get("/api/health", async (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
+app.use("/api/course-videos", courseVideoRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api", moduleRoutes);
@@ -91,6 +94,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/certificates", certificateRoutes);
 app.use("/api/live-classes", liveClassRoutes);
+app.use("/api/users", adminUserRoutes);
 app.get("/", (req, res) => {
   res.json({
     success: true,

@@ -1,4 +1,4 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, Navigate, NavLink, useNavigate } from "react-router-dom";
 import {
   Activity,
   ArrowRight,
@@ -23,6 +23,16 @@ const roleLabels = {
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  if (user?.role === "admin") {
+    return <Navigate to="/admin-dashboard" replace />;
+  }
+  if (user?.role === "instructor") {
+    return <Navigate to="/instructor-dashboard" replace />;
+  }
+  if (user?.role === "student") {
+    return <Navigate to="/student-dashboard" replace />;
+  }
 
   function handleLogout() {
     logout();

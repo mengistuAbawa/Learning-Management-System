@@ -32,6 +32,7 @@ import {
 } from "../services/enrollmentService";
 import { getAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
+import CourseVideoLibrary from "../components/CourseVideoLibrary";
 
 export default function StudentDashboardEnhanced() {
   const { user, logout } = useAuth();
@@ -227,6 +228,8 @@ export default function StudentDashboardEnhanced() {
             Join Next Class
           </Link>
         </section>
+
+        <CourseVideoLibrary />
 
         {/* Main Content */}
         <div className="grid gap-8 lg:grid-cols-3">

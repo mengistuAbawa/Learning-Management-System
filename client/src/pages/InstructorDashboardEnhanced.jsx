@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Activity,
   AlertCircle,
-  ArrowRight,
   BookOpen,
   CheckCircle2,
   LayoutGrid,
@@ -10,8 +8,6 @@ import {
   LogOut,
   Users,
   UserRound,
-  Zap,
-  TrendingUp,
   Clock,
   Bell,
   Search,
@@ -19,14 +15,13 @@ import {
   Download,
   Eye,
   Edit2,
-  Trash2,
   PlusCircle,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import NotificationBell from "../components/NotificationBell";
 import { getAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
+import CourseVideoRecorder from "../components/CourseVideoRecorder";
 
 export default function InstructorDashboardEnhanced() {
   const { user, logout } = useAuth();
@@ -36,6 +31,8 @@ export default function InstructorDashboardEnhanced() {
   const [courses, setCourses] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
+  const [showStudentCoursePicker, setShowStudentCoursePicker] = useState(false);
+  const [quickActionError, setQuickActionError] = useState("");
 
   const firstName = user?.full_name?.trim().split(/\s+/)[0] || "Instructor";
 
@@ -88,6 +85,76 @@ export default function InstructorDashboardEnhanced() {
     navigate("/login", { replace: true });
   }
 
+  function downloadReports() {
+    setQuickActionError("");
+    if (!analytics) {
+      setQuickActionError("Instructor analytics are not available to export right now.");
+      return;
+    }
+
+    const rows = [
+      ["Report section", "Metric", "Value"],
+      ...Object.entries(analytics.summary || {}).map(([key, value]) => [
+        "Summary",
+        key,
+        value ?? "",
+      ]),
+      ["Courses", "Course", "Status", "Students", "Completed enrollments", "Quiz attempts", "Average quiz percentage", "Assignment submissions", "Graded submissions", "Awaiting grade"],
+      ...(analytics.courses || []).map((course) => [
+        "Course",
+        course.title,
+        course.status,
+        course.enrollment_count,
+        course.completed_enrollments,
+        course.quiz_attempts,
+        course.average_quiz_percentage ?? "",
+        course.total_submissions,
+        course.graded_submissions,
+        course.awaiting_grade,
+      ]),
+      ["Monthly activity", "Month", "Quiz attempts", "Assignment submissions", "Assignments graded"],
+      ...(analytics.activityByMonth || []).map((month) => [
+        "Month",
+        month.month,
+        month.quiz_attempts,
+        month.assignment_submissions,
+        month.assignments_graded,
+      ]),
+    ];
+
+    const csv = rows
+      .map((row) =>
+        row
+          .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`)
+          .join(",")
+      )
+      .join("\r\n");
+    const file = new Blob(["\uFEFF", csv], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `instructor-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function openStudentManagement() {
+    setQuickActionError("");
+    if (courses.length === 0) {
+      navigate("/courses");
+      return;
+    }
+    if (courses.length === 1) {
+      navigate(`/courses/${courses[0].id}/enrollments`);
+      return;
+    }
+    setShowStudentCoursePicker((current) => !current);
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
@@ -99,8 +166,6 @@ export default function InstructorDashboardEnhanced() {
     );
   }
 
-  const publishedCount = courses.filter((c) => c.status === "published").length;
-  const draftCount = courses.filter((c) => c.status === "draft").length;
   const totalStudents = courses.reduce(
     (acc, course) => acc + (course.enrollment_count || 0),
     0,
@@ -190,6 +255,8 @@ export default function InstructorDashboardEnhanced() {
             <span>{error}</span>
           </div>
         )}
+
+        <CourseVideoRecorder courses={courses} />
 
         {/* Welcome & Stats Header */}
         <div className="mb-8 grid gap-6 lg:grid-cols-4">
@@ -409,23 +476,68 @@ export default function InstructorDashboardEnhanced() {
             {/* Quick Actions */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="mb-4 font-bold text-slate-900">Quick Actions</h3>
+              {quickActionError && (
+                <p role="alert" className="mb-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+                  {quickActionError}
+                </p>
+              )}
               <div className="space-y-2">
-                {[
-                  { icon: Edit2, label: "Edit Courses" },
-                  { icon: Download, label: "Download Reports" },
-                  { icon: Users, label: "Manage Students" },
-                ].map((action, idx) => {
-                  const Icon = action.icon;
-                  return (
-                    <button
-                      key={idx}
-                      className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition"
+                <button
+                  type="button"
+                  onClick={() => navigate("/courses")}
+                  className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition"
+                >
+                  <Edit2 className="h-4 w-4" />
+                  Edit Courses
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadReports}
+                  className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Reports
+                </button>
+                <button
+                  type="button"
+                  onClick={openStudentManagement}
+                  aria-expanded={showStudentCoursePicker}
+                  className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition"
+                >
+                  <Users className="h-4 w-4" />
+                  Manage Students
+                </button>
+                {showStudentCoursePicker && (
+                  <div className="rounded-lg border border-slate-200 p-3">
+                    <label
+                      htmlFor="manage-students-course"
+                      className="mb-2 block text-xs font-medium text-slate-600"
                     >
-                      <Icon className="h-4 w-4" />
-                      {action.label}
-                    </button>
-                  );
-                })}
+                      Choose a course
+                    </label>
+                    <select
+                      id="manage-students-course"
+                      defaultValue=""
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          navigate(
+                            `/courses/${event.target.value}/enrollments`
+                          );
+                        }
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                    >
+                      <option value="" disabled>
+                        Select one of your courses
+                      </option>
+                      {courses.map((course) => (
+                        <option key={course.id} value={course.id}>
+                          {course.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
           </aside>
