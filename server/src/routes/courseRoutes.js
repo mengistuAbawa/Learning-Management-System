@@ -32,8 +32,13 @@ const validateCourseId = [
 
 router.use(authenticate);
 
-// Public category endpoint (no specific auth role required)
+// All authenticated users can view categories.
 router.get("/categories", courseController.getCategories);
+router.post(
+  "/categories",
+  authorize("admin"),
+  courseController.createCategory,
+);
 
 // All authenticated roles can browse, but the controller restricts
 // students to published courses and instructors to their own courses.

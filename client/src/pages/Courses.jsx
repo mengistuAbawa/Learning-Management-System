@@ -25,8 +25,10 @@ import {
 import EnrollButton from "../components/EnrollButton";
 import { useAuth } from "../context/AuthContext";
 import {
+  createCategory,
   createCourse,
   deleteCourse,
+  getCategories,
   getCourses,
   updateCourse,
 } from "../services/courseService";
@@ -531,6 +533,10 @@ export default function Courses() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [newCategory, setNewCategory] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
   const [editorCourse, setEditorCourse] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -581,6 +587,27 @@ export default function Courses() {
   useEffect(() => {
     loadCourses();
   }, [loadCourses, refreshKey]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    getCategories()
+      .then((result) => {
+        if (isActive) {
+          setCategories((result.categories || []).map((item) => item.category));
+          setCategoryError("");
+        }
+      })
+      .catch((loadError) => {
+        if (isActive) {
+          setCategoryError(getErrorMessage(loadError));
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   function updateFilter(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -672,13 +699,38 @@ export default function Courses() {
     }
   }
 
-  const categories = useMemo(
+  const categoryNames = useMemo(
     () =>
       [
-        ...new Set(courses.map((course) => course.category).filter(Boolean)),
-      ].sort(),
-    [courses],
+        ...new Set([
+          ...categories,
+          ...courses.map((course) => course.category).filter(Boolean),
+        ]),
+      ].sort((first, second) => first.localeCompare(second)),
+    [categories, courses],
   );
+
+  async function handleCreateCategory(event) {
+    event.preventDefault();
+    setCategoryError("");
+    setNotice("");
+    setCreatingCategory(true);
+
+    try {
+      const result = await createCategory(newCategory.trim());
+      setCategories((current) =>
+        [...new Set([...current, result.category.name])].sort((a, b) =>
+          a.localeCompare(b),
+        ),
+      );
+      setNewCategory("");
+      setNotice(`Category "${result.category.name}" added successfully.`);
+    } catch (createError) {
+      setCategoryError(getErrorMessage(createError));
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -739,6 +791,64 @@ export default function Courses() {
           </div>
         </section>
 
+        {user?.role === "admin" && (
+          <section className="mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-5 sm:p-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold">Manage categories</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Add categories for instructors to use when creating courses.
+              </p>
+            </div>
+
+            <form
+              onSubmit={handleCreateCategory}
+              className="flex flex-col gap-3 sm:flex-row"
+            >
+              <input
+                value={newCategory}
+                onChange={(event) => setNewCategory(event.target.value)}
+                required
+                minLength={2}
+                maxLength={100}
+                aria-label="New category name"
+                placeholder="e.g. Data Science"
+                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950 px-4 py-3 outline-none focus:border-indigo-400"
+              />
+              <button
+                type="submit"
+                disabled={creatingCategory}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-5 py-3 font-semibold hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {creatingCategory ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                Add category
+              </button>
+            </form>
+
+            {categoryError && (
+              <p role="alert" className="mt-3 text-sm text-rose-300">
+                {categoryError}
+              </p>
+            )}
+
+            {categoryNames.length > 0 && (
+              <ul className="mt-4 flex flex-wrap gap-2">
+                {categoryNames.map((category) => (
+                  <li
+                    key={category}
+                    className="rounded-full border border-white/10 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
+                  >
+                    {category}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
         <section className="mt-8 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:p-5">
           <form
             onSubmit={handleSearch}
@@ -763,7 +873,7 @@ export default function Courses() {
               className="rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm outline-none focus:border-indigo-400"
             >
               <option value="">All categories</option>
-              {categories.map((category) => (
+              {categoryNames.map((category) => (
                 <option key={category} value={category}>
                   {category}
                 </option>
@@ -847,13 +957,13 @@ export default function Courses() {
         </section>
 
         {/* Category Browser */}
-        {!canManage && categories.length > 0 && (
+        {!canManage && categoryNames.length > 0 && (
           <section className="mt-6 rounded-2xl border border-white/10 bg-slate-900/40 p-5">
             <h3 className="mb-4 text-sm font-semibold uppercase text-slate-400">
               Browse by category
             </h3>
             <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
+              {categoryNames.map((category) => (
                 <Link
                   key={category}
                   to={`/courses/category/${encodeURIComponent(category)}`}

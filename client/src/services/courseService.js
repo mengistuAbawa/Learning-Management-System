@@ -15,6 +15,11 @@ export async function getCategories() {
   return response.data;
 }
 
+export async function createCategory(name) {
+  const response = await api.post("/courses/categories", { name });
+  return response.data;
+}
+
 export async function createCourse(course) {
   const response = await api.post("/courses", course);
   return response.data;

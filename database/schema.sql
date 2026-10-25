@@ -38,6 +38,16 @@ CREATE TABLE courses (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Categories can be created before any courses use them.
+CREATE TABLE course_categories (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_course_categories_name_lower
+    ON course_categories (LOWER(name));
+
 -- 3. Course modules
 CREATE TABLE modules (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

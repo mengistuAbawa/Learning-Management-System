@@ -632,41 +632,34 @@ async function listCategories(req, res) {
 
 async function getCategories(req, res) {
   try {
-    // Role-aware category listing
-    let query;
     const user = req.user;
-
-    if (user.role === "student") {
-      // Students see only categories with published courses
-      query = `SELECT DISTINCT c.category, COUNT(*)::int AS course_count
-               FROM courses c
-               WHERE c.status = 'published'
-               AND c.category IS NOT NULL
-               AND c.category != ''
-               GROUP BY c.category
-               ORDER BY c.category ASC`;
-    } else if (user.role === "instructor") {
-      // Instructors see categories from their own courses
-      query = `SELECT DISTINCT c.category, COUNT(*)::int AS course_count
-               FROM courses c
-               WHERE c.instructor_id = $1
-               AND c.category IS NOT NULL
-               AND c.category != ''
-               GROUP BY c.category
-               ORDER BY c.category ASC`;
-    } else {
-      // Admins see all categories
-      query = `SELECT DISTINCT c.category, COUNT(*)::int AS course_count
-               FROM courses c
-               WHERE c.category IS NOT NULL
-               AND c.category != ''
-               GROUP BY c.category
-               ORDER BY c.category ASC`;
-    }
-
+    const courseFilter =
+      user.role === "student"
+        ? "AND c.status = 'published'"
+        : user.role === "instructor"
+          ? "AND c.instructor_id = $1"
+          : "";
+    const values = user.role === "instructor" ? [user.id] : [];
     const result = await pool.query(
-      query,
-      user.role === "instructor" ? [user.id] : [],
+      `WITH category_names AS (
+         SELECT LOWER(BTRIM(name)) AS category_key, MIN(BTRIM(name)) AS category
+         FROM (
+           SELECT name FROM course_categories
+           UNION ALL
+           SELECT category FROM courses
+         ) names
+         WHERE name IS NOT NULL AND BTRIM(name) <> ''
+         GROUP BY LOWER(BTRIM(name))
+       )
+       SELECT names.category, COUNT(c.id)::int AS course_count
+       FROM category_names names
+       LEFT JOIN courses c
+         ON LOWER(BTRIM(c.category)) = names.category_key
+         ${courseFilter}
+       ${user.role === "student" ? "WHERE c.id IS NOT NULL" : ""}
+       GROUP BY names.category_key, names.category
+       ORDER BY names.category ASC`,
+      values,
     );
 
     return res.status(200).json({
@@ -682,6 +675,44 @@ async function getCategories(req, res) {
   }
 }
 
+async function createCategory(req, res) {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+
+  if (name.length < 2 || name.length > 100) {
+    return res.status(400).json({
+      success: false,
+      message: "Category name must contain between 2 and 100 characters.",
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO course_categories (name)
+       VALUES ($1)
+       RETURNING name`,
+      [name],
+    );
+
+    return res.status(201).json({
+      success: true,
+      category: { name: result.rows[0].name, course_count: 0 },
+    });
+  } catch (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        message: "A category with this name already exists.",
+      });
+    }
+
+    console.error("Create category error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to create category.",
+    });
+  }
+}
+
 module.exports = {
   listCourses,
   getCourseById,
@@ -690,4 +721,5 @@ module.exports = {
   deleteCourse,
   listCategories,
   getCategories,
+  createCategory,
 };

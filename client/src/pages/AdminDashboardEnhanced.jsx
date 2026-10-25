@@ -287,6 +287,12 @@ export default function AdminDashboardEnhanced() {
 
           <div className="flex items-center gap-4">
             <Link
+              to="/courses"
+              className="rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50"
+            >
+              Courses
+            </Link>
+            <Link
               to="/live-classes"
               className="rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50"
             >
@@ -814,7 +820,7 @@ export default function AdminDashboardEnhanced() {
                 Recently Added Courses
               </h2>
               <Link
-                to="#"
+                to="/courses"
                 className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold"
               >
                 View All
