@@ -12,14 +12,18 @@ let baseUrl;
 let instructorId;
 let otherInstructorId;
 let studentId;
+let excludedStudentId;
 let unenrolledStudentId;
 let adminId;
 let courseId;
 let otherCourseId;
 let enrollmentId;
+let excludedEnrollmentId;
 let liveClassId;
+let legacyClassId;
 let instructorToken;
 let studentToken;
+let excludedStudentToken;
 let otherInstructorToken;
 let unenrolledStudentToken;
 let adminToken;
@@ -75,6 +79,7 @@ before(async () => {
   instructorId = await insertUser(`${suffix}-owner`, "instructor");
   otherInstructorId = await insertUser(`${suffix}-other`, "instructor");
   studentId = await insertUser(`${suffix}-student`, "student");
+  excludedStudentId = await insertUser(`${suffix}-excluded`, "student");
   unenrolledStudentId = await insertUser(`${suffix}-unenrolled`, "student");
   adminId = await insertUser(`${suffix}-admin`, "admin");
 
@@ -101,9 +106,17 @@ before(async () => {
     [studentId, courseId]
   );
   enrollmentId = enrollment.rows[0].id;
+  const excludedEnrollment = await pool.query(
+    `INSERT INTO enrollments (student_id, course_id, status)
+     VALUES ($1, $2, 'active')
+     RETURNING id`,
+    [excludedStudentId, courseId]
+  );
+  excludedEnrollmentId = excludedEnrollment.rows[0].id;
 
   instructorToken = signedToken(instructorId);
   studentToken = signedToken(studentId);
+  excludedStudentToken = signedToken(excludedStudentId);
   otherInstructorToken = signedToken(otherInstructorId);
   unenrolledStudentToken = signedToken(unenrolledStudentId);
   adminToken = signedToken(adminId);
@@ -120,11 +133,17 @@ after(async () => {
   if (server) await new Promise((resolve) => server.close(resolve));
 
   try {
-    if (liveClassId) {
-      await pool.query("DELETE FROM live_classes WHERE id = $1", [liveClassId]);
+    const liveClassIds = [liveClassId, legacyClassId].filter(Boolean);
+    if (liveClassIds.length) {
+      await pool.query("DELETE FROM live_classes WHERE id = ANY($1::bigint[])", [
+        liveClassIds,
+      ]);
     }
     if (enrollmentId) {
       await pool.query("DELETE FROM enrollments WHERE id = $1", [enrollmentId]);
+    }
+    if (excludedEnrollmentId) {
+      await pool.query("DELETE FROM enrollments WHERE id = $1", [excludedEnrollmentId]);
     }
     const courseIds = [courseId, otherCourseId].filter(Boolean);
     if (courseIds.length) {
@@ -136,6 +155,7 @@ after(async () => {
       instructorId,
       otherInstructorId,
       studentId,
+      excludedStudentId,
       unenrolledStudentId,
       adminId,
     ].filter(Boolean);
@@ -172,6 +192,7 @@ test("live classes enforce course permissions and issue scoped provider tokens",
     scheduled_at: new Date(Date.now() + 12 * 60 * 1000).toISOString(),
     duration_minutes: 30,
     time_zone: "UTC",
+    permitted_student_ids: [Number(studentId)],
   };
 
   await t.test("only the course instructor may schedule a class", async () => {
@@ -182,6 +203,16 @@ test("live classes enforce course permissions and issue scoped provider tokens",
     });
     assert.equal(forbidden.status, 403);
 
+    const invalidParticipants = await request("/live-classes", {
+      token: instructorToken,
+      method: "POST",
+      body: {
+        ...classPayload,
+        permitted_student_ids: [Number(unenrolledStudentId)],
+      },
+    });
+    assert.equal(invalidParticipants.status, 400);
+
     const created = await request("/live-classes", {
       token: instructorToken,
       method: "POST",
@@ -190,12 +221,71 @@ test("live classes enforce course permissions and issue scoped provider tokens",
     assert.equal(created.status, 201);
     assert.equal(created.body.live_class.title, classPayload.title);
     liveClassId = created.body.live_class.id;
+
+    const legacy = await request("/live-classes", {
+      token: instructorToken,
+      method: "POST",
+      body: {
+        ...classPayload,
+        title: "All Enrolled Students Session",
+        permitted_student_ids: undefined,
+      },
+    });
+    assert.equal(legacy.status, 201);
+    assert.equal(legacy.body.live_class.participants_restricted, false);
+    legacyClassId = legacy.body.live_class.id;
   });
 
-  await t.test("students see only classes for their active enrollments", async () => {
+  await t.test("the instructor can reschedule and inspect the session allow-list", async () => {
+    const forbidden = await request(`/live-classes/${liveClassId}`, {
+      token: otherInstructorToken,
+      method: "PATCH",
+      body: {
+        ...classPayload,
+        scheduled_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+      },
+    });
+    assert.equal(forbidden.status, 403);
+
+    const updated = await request(`/live-classes/${liveClassId}`, {
+      token: instructorToken,
+      method: "PATCH",
+      body: {
+        ...classPayload,
+        title: "Rescheduled Secure Live Class",
+        scheduled_at: new Date(Date.now() + 12 * 60 * 1000).toISOString(),
+        permitted_student_ids: [Number(studentId)],
+      },
+    });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.body.live_class.title, "Rescheduled Secure Live Class");
+
+    const participants = await request(
+      `/live-classes/${liveClassId}/permitted-participants`,
+      { token: instructorToken }
+    );
+    assert.equal(participants.status, 200);
+    assert.deepEqual(participants.body.permitted_student_ids, [Number(studentId)]);
+    assert.equal(participants.body.restricted, true);
+  });
+
+  await t.test("only selected enrolled students can see or access the class", async () => {
     const enrolled = await request("/live-classes", { token: studentToken });
     assert.equal(enrolled.status, 200);
-    assert.equal(enrolled.body.classes.length, 1);
+    assert.equal(enrolled.body.classes.length, 2);
+
+    const excluded = await request("/live-classes", { token: excludedStudentToken });
+    assert.equal(excluded.status, 200);
+    assert.equal(excluded.body.classes.length, 1);
+    assert.equal(String(excluded.body.classes[0].id), String(legacyClassId));
+    assert.equal(
+      (await request(`/live-classes/${liveClassId}`, { token: excludedStudentToken })).status,
+      403
+    );
+    assert.equal(
+      (await request(`/live-classes/${legacyClassId}`, { token: excludedStudentToken })).status,
+      200
+    );
 
     const absent = await request("/live-classes", {
       token: unenrolledStudentToken,
@@ -207,6 +297,23 @@ test("live classes enforce course permissions and issue scoped provider tokens",
       token: unenrolledStudentToken,
     });
     assert.equal(denied.status, 403);
+  });
+
+  await t.test("students can see cancelled class status but cannot join", async () => {
+    const cancelled = await request(`/live-classes/${legacyClassId}/cancel`, {
+      token: instructorToken,
+      method: "POST",
+    });
+    assert.equal(cancelled.status, 200);
+    assert.equal(cancelled.body.live_class.status, "cancelled");
+
+    const listed = await request("/live-classes", { token: excludedStudentToken });
+    const classRow = listed.body.classes.find(
+      (item) => String(item.id) === String(legacyClassId)
+    );
+    assert.ok(classRow);
+    assert.equal(classRow.status, "cancelled");
+    assert.equal(classRow.can_join, false);
   });
 
   await t.test("students cannot start a class or obtain a token for a scheduled class", async () => {
@@ -221,6 +328,22 @@ test("live classes enforce course permissions and issue scoped provider tokens",
       method: "POST",
     });
     assert.equal(token.status, 409);
+
+    const originalSecret = process.env.LIVEKIT_API_SECRET;
+    delete process.env.LIVEKIT_API_SECRET;
+    try {
+      const unavailable = await request(`/live-classes/${liveClassId}/start`, {
+        token: instructorToken,
+        method: "POST",
+      });
+      assert.equal(unavailable.status, 503);
+      const classState = await request(`/live-classes/${liveClassId}`, {
+        token: instructorToken,
+      });
+      assert.equal(classState.body.live_class.status, "scheduled");
+    } finally {
+      process.env.LIVEKIT_API_SECRET = originalSecret;
+    }
   });
 
   await t.test("authorized instructor starts class and receives a moderator token", async () => {
@@ -237,7 +360,7 @@ test("live classes enforce course permissions and issue scoped provider tokens",
     });
     assert.equal(result.status, 200);
     const grant = jwt.decode(result.body.token).video;
-    assert.equal(grant.roomAdmin, true);
+    assert.notEqual(grant.roomAdmin, true);
     assert.equal(grant.canPublishData, false);
     assert.ok(grant.canPublishSources.includes("screen_share"));
   });
@@ -301,13 +424,7 @@ test("live classes enforce course permissions and issue scoped provider tokens",
       removeParticipant: RoomServiceClient.prototype.removeParticipant,
     };
     const moderated = [];
-    RoomServiceClient.prototype.listParticipants = async () => [
-      {
-        identity: `user-${studentId}`,
-        tracks: [{ source: TrackSource.MICROPHONE, sid: "TR_test_audio" }],
-      },
-      { identity: `user-${instructorId}`, tracks: [] },
-    ];
+    RoomServiceClient.prototype.listParticipants = async () => [];
     RoomServiceClient.prototype.sendData = async () => {};
     RoomServiceClient.prototype.mutePublishedTrack = async (...args) => {
       moderated.push(["mute", ...args]);
@@ -317,6 +434,19 @@ test("live classes enforce course permissions and issue scoped provider tokens",
     };
 
     try {
+      const forgedAttendance = await request(
+        `/live-classes/${liveClassId}/attendance/join`,
+        { token: studentToken, method: "POST", body: { user_id: excludedStudentId } }
+      );
+      assert.equal(forgedAttendance.status, 409);
+
+      RoomServiceClient.prototype.listParticipants = async () => [
+      {
+        identity: `user-${studentId}`,
+        tracks: [{ source: TrackSource.MICROPHONE, sid: "TR_test_audio" }],
+      },
+      { identity: `user-${instructorId}`, tracks: [] },
+      ];
       const chat = await request(`/live-classes/${liveClassId}/chat`, {
         token: studentToken,
         method: "POST",
@@ -397,6 +527,21 @@ test("live classes enforce course permissions and issue scoped provider tokens",
         method: "POST",
       });
       assert.equal(leave.status, 200);
+      const ownAttendance = await request("/live-classes/attendance/mine", {
+        token: studentToken,
+      });
+      assert.equal(ownAttendance.status, 200);
+      assert.equal(ownAttendance.body.attendance.length, 1);
+      assert.equal(
+        Number(ownAttendance.body.attendance[0].total_duration_seconds) >= 0,
+        true
+      );
+      assert.equal(
+        (await request("/live-classes/attendance/mine", {
+          token: instructorToken,
+        })).status,
+        403
+      );
 
       const muted = await request(
         `/live-classes/${liveClassId}/participants/${studentId}/mute`,
@@ -453,8 +598,12 @@ test("live classes enforce course permissions and issue scoped provider tokens",
     }
   });
 
-  await t.test("unenrolled students and unrelated instructors cannot access room tokens", async () => {
-    for (const token of [unenrolledStudentToken, otherInstructorToken]) {
+  await t.test("unselected or unauthorized users cannot access room tokens", async () => {
+    for (const token of [
+      excludedStudentToken,
+      unenrolledStudentToken,
+      otherInstructorToken,
+    ]) {
       const result = await request(`/live-classes/${liveClassId}/token`, {
         token,
         method: "POST",

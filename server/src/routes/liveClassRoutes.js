@@ -59,6 +59,11 @@ const classroomActionLimit = rateLimit({
 router.use(authenticate);
 
 router.get("/", controller.list);
+router.get(
+  "/attendance/mine",
+  authorize("student"),
+  controller.getMyAttendance
+);
 router.post(
   "/",
   authorize("instructor", "admin"),
@@ -70,6 +75,12 @@ router.patch(
   ...validateId,
   authorize("instructor", "admin"),
   controller.update
+);
+router.get(
+  "/:id/permitted-participants",
+  ...validateId,
+  authorize("instructor", "admin"),
+  controller.getPermittedParticipants
 );
 router.post(
   "/:id/start",

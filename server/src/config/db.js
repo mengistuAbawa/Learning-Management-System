@@ -1,16 +1,39 @@
 
 const { Pool } = require("pg");
 require("dotenv").config();
-const pool = new Pool({
-  host: process.env.DB_HOST || "localhost",
-  port: Number(process.env.DB_PORT) || 5432,
-  database: process.env.DB_NAME || "learnsphere_lms",
-  user: process.env.DB_USER || "postgres",
-  password: process.env.DB_PASSWORD,
-  connectionTimeoutMillis: 5000,
-  idleTimeoutMillis: 30000,
-  max: 10,
-});
+
+function getPoolConfig() {
+  const sharedOptions = {
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 30000,
+    max: 10,
+  };
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (databaseUrl) {
+    const connectionUrl = new URL(databaseUrl);
+    for (const option of ["sslmode", "sslrootcert", "sslcert", "sslkey"]) {
+      connectionUrl.searchParams.delete(option);
+    }
+
+    return {
+      ...sharedOptions,
+      connectionString: connectionUrl.toString(),
+      ssl: { rejectUnauthorized: true },
+    };
+  }
+
+  return {
+    ...sharedOptions,
+    host: process.env.DB_HOST || "localhost",
+    port: Number(process.env.DB_PORT) || 5432,
+    database: process.env.DB_NAME || "learnsphere_lms",
+    user: process.env.DB_USER || "postgres",
+    password: process.env.DB_PASSWORD,
+  };
+}
+
+const pool = new Pool(getPoolConfig());
 
 pool.on("error", (error) => {
   console.error("Unexpected PostgreSQL pool error:", error.message);

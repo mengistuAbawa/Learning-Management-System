@@ -1,6 +1,12 @@
 # Learning-Management-System
 A Learning Management System (LMS) is a software platform to create, deliver, and track learning. It helps educators manage courses, assignments, and assessments, while learners can access content anytime, monitor progress, and collaborate online efficiently.
 
+## Deploy to Render, Vercel, and Neon
+
+Deployment files and provider-specific instructions are available in
+[DEPLOY_RENDER_VERCEL_NEON.md](./DEPLOY_RENDER_VERCEL_NEON.md). The Render
+blueprint uses a paid persistent disk for uploaded course videos.
+
 ## Instructor course video recordings
 
 Instructors can record a lesson from the instructor dashboard and upload it to a course they own. After recording, **Save draft** keeps it instructor-only; **Send to students** publishes it to active and completed enrollees. Saved drafts can be sent later from the instructor's recordings list. Recordings are stored privately under `server/storage/course-videos` and are not served as public static files. The API accepts WebM, MP4, and Ogg recordings up to 200 MB per upload, with a limit of 10 uploads per 15 minutes from one IP address. Use HTTPS outside localhost so browsers permit camera and microphone access.

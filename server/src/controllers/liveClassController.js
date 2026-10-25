@@ -87,12 +87,58 @@ function readSchedule(body) {
   };
 }
 
+function readPermittedStudentIds(body) {
+  if (body.permitted_student_ids === undefined) {
+    return { errors: [], ids: null };
+  }
+  if (
+    !Array.isArray(body.permitted_student_ids) ||
+    body.permitted_student_ids.length > 500
+  ) {
+    return {
+      errors: ["permitted_student_ids must be an array of up to 500 student IDs."],
+      ids: null,
+    };
+  }
+  const ids = body.permitted_student_ids.map(Number);
+  if (
+    ids.some((id) => !Number.isSafeInteger(id) || id < 1) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return {
+      errors: ["Permitted student IDs must be unique positive integers."],
+      ids: null,
+    };
+  }
+  return { errors: [], ids };
+}
+
+async function validatePermittedStudents(courseId, ids) {
+  if (ids === null) return { valid: true };
+  const result = await pool.query(
+    `SELECT student_id
+     FROM enrollments
+     WHERE course_id = $1
+       AND status IN ('active', 'completed')
+       AND student_id = ANY($2::bigint[])`,
+    [courseId, ids]
+  );
+  if (result.rowCount !== ids.length) {
+    return {
+      valid: false,
+      message: "Every permitted participant must be actively enrolled in this course.",
+    };
+  }
+  return { valid: true };
+}
+
 async function loadClass(classId) {
   const result = await pool.query(
     `SELECT lc.id, lc.course_id, lc.instructor_id, lc.title, lc.description,
             lc.learning_objectives, lc.scheduled_at, lc.duration_minutes,
             lc.time_zone, lc.room_name, lc.status, lc.started_at, lc.ended_at,
-            lc.created_at, lc.whiteboard_student_editing, c.title AS course_title,
+            lc.created_at, lc.whiteboard_student_editing,
+            lc.participants_restricted, c.title AS course_title,
             u.full_name AS instructor_name
      FROM live_classes lc
      JOIN courses c ON c.id = lc.course_id
@@ -119,14 +165,30 @@ async function canAccessClass(user, liveClass) {
      WHERE student_id = $1
        AND course_id = $2
        AND status IN ('active', 'completed')
+       AND (
+         NOT $3::boolean OR EXISTS (
+           SELECT 1 FROM live_class_participants participant
+           WHERE participant.live_class_id = $4
+             AND participant.user_id = $1
+         )
+       )
      LIMIT 1`,
-    [user.id, liveClass.course_id]
+    [
+      user.id,
+      liveClass.course_id,
+      liveClass.participants_restricted === true,
+      liveClass.id,
+    ]
   );
   return result.rowCount > 0;
 }
 
 function serializeClass(liveClass, user) {
   const instructor = String(liveClass.instructor_id) === String(user.id);
+  const classEndTime = Date.parse(
+    liveClass.started_at || liveClass.scheduled_at
+  ) + Number(liveClass.duration_minutes) * 60 * 1000;
+  const withinDuration = liveClass.status !== "live" || Date.now() < classEndTime;
   return {
     id: liveClass.id,
     course_id: liveClass.course_id,
@@ -142,21 +204,39 @@ function serializeClass(liveClass, user) {
     started_at: liveClass.started_at,
     ended_at: liveClass.ended_at,
     whiteboard_student_editing: liveClass.whiteboard_student_editing,
+    participants_restricted: liveClass.participants_restricted === true,
     can_manage: instructor || user.role === "admin",
-    can_join: user.role !== "admin" &&
-      (liveClass.status === "live" ||
-        (instructor && liveClass.status === "scheduled" &&
-          Date.now() >= Date.parse(liveClass.scheduled_at) - 15 * 60 * 1000)),
+    can_join: user.role !== "admin" && (
+      (liveClass.status === "live" && withinDuration) ||
+      (instructor && liveClass.status === "scheduled" &&
+        Date.now() >= Date.parse(liveClass.scheduled_at) - 15 * 60 * 1000)
+    ),
   };
 }
 
-async function notifyEnrolledStudents(liveClass, event, title, message) {
+async function notifyEnrolledStudents(
+  liveClass,
+  event,
+  title,
+  message,
+  recipientIds = null,
+  includePreviouslyPermitted = false
+) {
   try {
     await pool.query(
       `INSERT INTO notifications (user_id, type, title, message, link_url, dedupe_key)
        SELECT e.student_id, 'live_class', $2, $3, $4, $5 || ':' || e.student_id
        FROM enrollments e
-       WHERE e.course_id = $1 AND e.status IN ('active', 'completed')
+       WHERE e.course_id = $1
+         AND e.status IN ('active', 'completed')
+         AND (
+           $8::boolean OR NOT $6::boolean OR EXISTS (
+             SELECT 1 FROM live_class_participants participant
+             WHERE participant.live_class_id = $7
+               AND participant.user_id = e.student_id
+           )
+         )
+         AND ($9::bigint[] IS NULL OR e.student_id = ANY($9::bigint[]))
        ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
       [
         liveClass.course_id,
@@ -164,6 +244,10 @@ async function notifyEnrolledStudents(liveClass, event, title, message) {
         message,
         `/live-classes/${liveClass.id}/room`,
         `live-class:${liveClass.id}:${event}`,
+        liveClass.participants_restricted === true,
+        liveClass.id,
+        includePreviouslyPermitted,
+        recipientIds,
       ]
     );
   } catch (error) {
@@ -204,7 +288,13 @@ async function list(req, res, next) {
          JOIN enrollments e ON e.course_id = lc.course_id
          WHERE e.student_id = $1
            AND e.status IN ('active', 'completed')
-           AND lc.status <> 'cancelled'
+           AND (
+             NOT lc.participants_restricted OR EXISTS (
+               SELECT 1 FROM live_class_participants participant
+               WHERE participant.live_class_id = lc.id
+                 AND participant.user_id = e.student_id
+             )
+           )
          ORDER BY lc.scheduled_at DESC
          LIMIT 100`,
         [req.user.id]
@@ -228,11 +318,12 @@ async function create(req, res, next) {
     }
 
     const { errors, data } = readSchedule(req.body);
-    if (errors.length) {
+    const permitted = readPermittedStudentIds(req.body);
+    if (errors.length || permitted.errors.length) {
       return res.status(400).json({
         success: false,
         message: "Please correct the submitted information.",
-        errors: errors.map((message) => ({ message })),
+        errors: [...errors, ...permitted.errors].map((message) => ({ message })),
       });
     }
 
@@ -247,25 +338,48 @@ async function create(req, res, next) {
       return sendError(res, 403, "You may only schedule classes for courses you manage.");
     }
 
-    const result = await pool.query(
-      `INSERT INTO live_classes
-         (course_id, instructor_id, title, description, learning_objectives,
-          scheduled_at, duration_minutes, time_zone)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id`,
-      [
-        courseId,
-        req.user.id,
-        data.title,
-        data.description,
-        data.learningObjectives,
-        data.scheduledAt,
-        data.duration,
-        data.timeZone,
-      ]
-    );
+    const validation = await validatePermittedStudents(courseId, permitted.ids);
+    if (!validation.valid) return sendError(res, 400, validation.message);
 
-    const liveClass = await loadClass(result.rows[0].id);
+    const client = await pool.connect();
+    let classId;
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `INSERT INTO live_classes
+           (course_id, instructor_id, title, description, learning_objectives,
+            scheduled_at, duration_minutes, time_zone, participants_restricted)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id`,
+        [
+          courseId,
+          req.user.id,
+          data.title,
+          data.description,
+          data.learningObjectives,
+          data.scheduledAt,
+          data.duration,
+          data.timeZone,
+          permitted.ids !== null,
+        ]
+      );
+      classId = result.rows[0].id;
+      if (permitted.ids?.length) {
+        await client.query(
+          `INSERT INTO live_class_participants (live_class_id, user_id)
+           SELECT $1, student_id FROM unnest($2::bigint[]) AS student_id`,
+          [classId, permitted.ids]
+        );
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const liveClass = await loadClass(classId);
     await notifyEnrolledStudents(
       liveClass,
       `scheduled:${new Date(liveClass.scheduled_at).toISOString()}`,
@@ -314,39 +428,127 @@ async function update(req, res, next) {
     }
 
     const { errors, data } = readSchedule(req.body);
-    if (errors.length) {
+    const permitted = readPermittedStudentIds(req.body);
+    if (errors.length || permitted.errors.length) {
       return res.status(400).json({
         success: false,
         message: "Please correct the submitted information.",
-        errors: errors.map((message) => ({ message })),
+        errors: [...errors, ...permitted.errors].map((message) => ({ message })),
       });
     }
 
-    await pool.query(
-      `UPDATE live_classes
-       SET title = $2, description = $3, learning_objectives = $4,
-           scheduled_at = $5, duration_minutes = $6, time_zone = $7,
-           updated_at = NOW()
-       WHERE id = $1`,
+    const validation = await validatePermittedStudents(
+      liveClass.course_id,
+      permitted.ids
+    );
+    if (!validation.valid) return sendError(res, 400, validation.message);
+
+    const previousParticipants = await pool.query(
+      `SELECT e.student_id AS user_id
+       FROM enrollments e
+       WHERE e.course_id = $1
+         AND e.status IN ('active', 'completed')
+         AND (
+           NOT $2::boolean OR EXISTS (
+             SELECT 1 FROM live_class_participants participant
+             WHERE participant.live_class_id = $3
+               AND participant.user_id = e.student_id
+           )
+         )`,
       [
+        liveClass.course_id,
+        liveClass.participants_restricted === true,
         liveClass.id,
-        data.title,
-        data.description,
-        data.learningObjectives,
-        data.scheduledAt,
-        data.duration,
-        data.timeZone,
       ]
     );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const updateResult = await client.query(
+        `UPDATE live_classes
+         SET title = $2, description = $3, learning_objectives = $4,
+             scheduled_at = $5, duration_minutes = $6, time_zone = $7,
+             participants_restricted = CASE
+               WHEN $8::boolean THEN TRUE ELSE participants_restricted END,
+             updated_at = NOW()
+         WHERE id = $1 AND status = 'scheduled'`,
+        [
+          liveClass.id,
+          data.title,
+          data.description,
+          data.learningObjectives,
+          data.scheduledAt,
+          data.duration,
+          data.timeZone,
+          permitted.ids !== null,
+        ]
+      );
+      if (!updateResult.rowCount) {
+        await client.query("ROLLBACK");
+        return sendError(res, 409, "This class is no longer scheduled.");
+      }
+      if (permitted.ids !== null) {
+        await client.query(
+          `DELETE FROM live_class_participants WHERE live_class_id = $1`,
+          [liveClass.id]
+        );
+        if (permitted.ids.length) {
+          await client.query(
+            `INSERT INTO live_class_participants (live_class_id, user_id)
+             SELECT $1, student_id FROM unnest($2::bigint[]) AS student_id`,
+            [liveClass.id, permitted.ids]
+          );
+        }
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+    const updatedClass = await loadClass(liveClass.id);
+    const recipientIds = permitted.ids === null
+      ? null
+      : [...new Set([
+          ...permitted.ids,
+          ...previousParticipants.rows.map((row) => Number(row.user_id)),
+        ])];
     await notifyEnrolledStudents(
-      liveClass,
-      `rescheduled:${data.scheduledAt.toISOString()}`,
+      updatedClass,
+      `rescheduled:${data.scheduledAt.toISOString()}:${recipientIds?.join(",") || "all"}`,
       "Live class updated",
-      `"${data.title}" has been rescheduled.`
+      `"${data.title}" has been rescheduled.`,
+      recipientIds,
+      recipientIds !== null
     );
     return res.json({
       success: true,
-      live_class: serializeClass(await loadClass(liveClass.id), req.user),
+      live_class: serializeClass(updatedClass, req.user),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getPermittedParticipants(req, res, next) {
+  try {
+    const liveClass = await loadClass(req.params.id);
+    if (!liveClass) return sendError(res, 404, "Live class not found.");
+    if (req.user.role !== "admin" && !isClassInstructor(req.user, liveClass)) {
+      return sendError(res, 403, "Only the class instructor may view permitted participants.");
+    }
+    const result = await pool.query(
+      `SELECT user_id
+       FROM live_class_participants
+       WHERE live_class_id = $1
+       ORDER BY user_id`,
+      [liveClass.id]
+    );
+    return res.json({
+      success: true,
+      restricted: liveClass.participants_restricted === true,
+      permitted_student_ids: result.rows.map((row) => Number(row.user_id)),
     });
   } catch (error) {
     next(error);
@@ -376,6 +578,21 @@ async function changeStatus(req, res, status, next) {
           409,
           "The class can be started up to 15 minutes before its scheduled time."
         );
+      }
+      const liveKitUrl = process.env.LIVEKIT_URL;
+      const apiKey = process.env.LIVEKIT_API_KEY;
+      const apiSecret = process.env.LIVEKIT_API_SECRET;
+      if (!liveKitUrl || !apiKey || !apiSecret) {
+        return sendError(res, 503, "Live video is not configured.");
+      }
+      let providerUrl;
+      try {
+        providerUrl = new URL(liveKitUrl);
+      } catch {
+        return sendError(res, 503, "The LiveKit server URL is invalid.");
+      }
+      if (providerUrl.protocol !== "wss:") {
+        return sendError(res, 503, "LIVEKIT_URL must use the secure wss:// protocol.");
       }
       const update = await pool.query(
         `UPDATE live_classes
@@ -542,7 +759,6 @@ async function issueToken(req, res, next) {
       canPublishSources: isInstructor ? INSTRUCTOR_SOURCES : STUDENT_SOURCES,
       canSubscribe: true,
       canPublishData: false,
-      roomAdmin: isInstructor,
     });
 
     return res.json({
@@ -1165,6 +1381,39 @@ async function leaveAttendance(req, res, next) {
   return updateAttendance(req, res, next, "leave");
 }
 
+async function getMyAttendance(req, res, next) {
+  try {
+    const result = await pool.query(
+      `SELECT lc.id AS live_class_id, lc.title AS live_class_title,
+              lc.scheduled_at, lc.duration_minutes, lc.status,
+              c.id AS course_id, c.title AS course_title,
+              a.first_joined_at, a.last_joined_at, a.last_left_at,
+              a.join_count,
+              a.total_duration_seconds +
+                CASE
+                  WHEN a.connected_since IS NULL OR a.last_heartbeat_at IS NULL
+                    OR a.last_heartbeat_at <= NOW() - INTERVAL '90 seconds'
+                  THEN 0
+                  ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (
+                    LEAST(NOW(), a.last_heartbeat_at + INTERVAL '90 seconds')
+                      - a.connected_since
+                  )))::INTEGER)
+                END AS total_duration_seconds,
+              (a.connected_since IS NOT NULL
+                AND a.last_heartbeat_at > NOW() - INTERVAL '90 seconds') AS connected
+       FROM live_class_attendance a
+       JOIN live_classes lc ON lc.id = a.live_class_id
+       JOIN courses c ON c.id = lc.course_id
+       WHERE a.user_id = $1
+       ORDER BY lc.scheduled_at DESC`,
+      [req.user.id]
+    );
+    return res.json({ success: true, attendance: result.rows });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getAttendance(req, res, next) {
   try {
     const liveClass = await loadClass(req.params.id);
@@ -1250,4 +1499,6 @@ module.exports = {
   joinAttendance,
   leaveAttendance,
   getAttendance,
+  getMyAttendance,
+  getPermittedParticipants,
 };

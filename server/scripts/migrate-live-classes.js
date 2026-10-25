@@ -17,6 +17,7 @@ async function main() {
     for (const migrationFile of [
       "20261024_live_classes.sql",
       "20261025_live_classroom_collaboration.sql",
+      "20261025_live_class_participants.sql",
     ]) {
       const migration = await fs.readFile(
         path.join(migrationsDirectory, migrationFile),
@@ -31,7 +32,7 @@ async function main() {
        WHERE table_schema = current_schema()
          AND table_name = 'live_classes'`
     );
-    if (result.rows[0].column_count < 16) {
+    if (result.rows[0].column_count < 17) {
       throw new Error("Live class migration verification failed.");
     }
 

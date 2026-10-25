@@ -6,11 +6,13 @@ import {
   ArrowLeft,
   ArrowUp,
   BookOpen,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
   Clock,
+  Clock3,
   Edit3,
   FileText,
   Film,
@@ -334,6 +336,8 @@ export default function CourseContent() {
   const [expanded, setExpanded] = useState({});
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [courseVideos, setCourseVideos] = useState([]);
+  const [liveClasses, setLiveClasses] = useState([]);
+  const [liveClassError, setLiveClassError] = useState("");
   const [quizzes, setQuizzes] = useState([]);
   const [quizError, setQuizError] = useState("");
   const [lessonPlaybackUrl, setLessonPlaybackUrl] = useState("");
@@ -377,6 +381,18 @@ export default function CourseContent() {
       setCourse(courseResult.course);
       setModules(moduleResult.modules || []);
       setCourseVideos(availableVideos);
+      try {
+        const liveClassResult = await api.get("/live-classes");
+        setLiveClasses(
+          (liveClassResult.data.classes || []).filter(
+            (liveClass) => String(liveClass.course_id) === String(courseId)
+          )
+        );
+        setLiveClassError("");
+      } catch (liveClassLoadError) {
+        setLiveClasses([]);
+        setLiveClassError(errorText(liveClassLoadError));
+      }
 
       const lessonResults = await Promise.all(
         (moduleResult.modules || []).map(async (module) => {
@@ -628,6 +644,10 @@ export default function CourseContent() {
 
   const totalLessons = Object.values(lessonsByModule)
     .reduce((sum, lessons) => sum + lessons.length, 0);
+  const canManageCourse =
+    user?.role === "admin" ||
+    (user?.role === "instructor" &&
+      String(user.id) === String(course.instructor_id));
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -689,6 +709,75 @@ export default function CourseContent() {
               </button>
             )}
           </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-5 w-5 text-indigo-300" />
+                <h2 className="text-xl font-bold">Live classes</h2>
+              </div>
+              <p className="mt-1 text-sm text-slate-400">
+                Join scheduled real-time sessions for this course.
+              </p>
+            </div>
+            {canManageCourse && (
+              <Link
+                to="/live-classes"
+                className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-semibold hover:bg-indigo-400"
+              >
+                Manage live classes
+              </Link>
+            )}
+          </div>
+          {liveClassError ? (
+            <p role="alert" className="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-200">
+              {liveClassError}
+            </p>
+          ) : liveClasses.length ? (
+            <ul className="mt-4 grid gap-3 md:grid-cols-2">
+              {liveClasses.map((liveClass) => (
+                <li key={liveClass.id} className="rounded-xl border border-white/10 bg-slate-950/70 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-semibold">{liveClass.title}</h3>
+                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs capitalize text-slate-300">
+                      {liveClass.status === "ended" ? "Completed" : liveClass.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {liveClass.description || "Course live session"}
+                  </p>
+                  <p className="mt-3 flex items-center gap-2 text-xs text-slate-400">
+                    <CalendarClock className="h-4 w-4" />
+                    {new Date(liveClass.scheduled_at).toLocaleString()}
+                    <Clock3 className="ml-2 h-4 w-4" />
+                    {liveClass.duration_minutes} minutes
+                  </p>
+                  {liveClass.can_join && !liveClass.can_manage && (
+                    <Link
+                      to={`/live-classes/${liveClass.id}/room`}
+                      className="mt-3 inline-flex rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500"
+                    >
+                      Join class
+                    </Link>
+                  )}
+                  {liveClass.can_manage && (
+                    <Link
+                      to="/live-classes"
+                      className="mt-3 inline-flex rounded-lg border border-white/10 px-3 py-2 text-sm font-semibold hover:bg-white/5"
+                    >
+                      Open class management
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
+              No live classes are currently available for this course.
+            </p>
+          )}
         </section>
 
         {notice && (
