@@ -75,12 +75,14 @@ secret to Vercel or any `VITE_*` variable.
    you deploy:
 
    ```text
-   https://<render-service>.onrender.com/api
+   https://<render-service>.onrender.com
    ```
 
-   Vite embeds this value during build; redeploy after changing it.
+   The frontend automatically appends `/api`, so either the origin above or
+   the origin ending in `/api` is accepted. Vite embeds this value during
+   build; redeploy after changing it.
    Vercel production builds now fail with a configuration error if this value
-   is missing, not HTTPS, points to localhost, or does not end in `/api`.
+   is missing, not HTTPS, points to localhost, or has an unsupported path.
 4. If the Render service already exists, sync the Blueprint change or set the
    Render service's `CLIENT_URL` to
    `https://learning-management-system-mu-eight.vercel.app` (do not include

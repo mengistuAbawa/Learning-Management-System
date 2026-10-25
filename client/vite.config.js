@@ -26,11 +26,11 @@ export default defineConfig(({ mode }) => {
 
     if (
       parsedApiURL.protocol !== "https:" ||
-      !parsedApiURL.pathname.replace(/\/+$/, "").endsWith("/api") ||
+      !["", "/api"].includes(parsedApiURL.pathname.replace(/\/+$/, "")) ||
       /localhost|127\.0\.0\.1/i.test(parsedApiURL.hostname)
     ) {
       throw new Error(
-        "VITE_API_URL must be your public HTTPS Render API URL ending in /api, not localhost.",
+        "VITE_API_URL must be your public HTTPS Render API origin, optionally followed by /api, not localhost.",
       );
     }
   }
