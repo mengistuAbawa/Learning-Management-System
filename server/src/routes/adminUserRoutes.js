@@ -1,6 +1,7 @@
 const express = require("express");
 const { body, param, validationResult } = require("express-validator");
 const { authenticate, authorize } = require("../middleware/auth");
+const { auditAdminAction } = require("../middleware/adminAudit");
 const controller = require("../controllers/adminUserController");
 
 const router = express.Router();
@@ -25,6 +26,7 @@ const validateId = param("id")
   .withMessage("User ID must be a positive integer.");
 
 router.use(authenticate, authorize("admin"));
+router.use(auditAdminAction);
 router.post(
   "/students",
   body("full_name")
@@ -71,9 +73,36 @@ router.patch(
   body("approval_status")
     .isIn(["approved", "rejected"])
     .withMessage("approval_status must be approved or rejected."),
+  body("reason")
+    .optional({ nullable: true })
+    .isString()
+    .withMessage("reason must be text.")
+    .bail()
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage("reason must not exceed 1,000 characters."),
   validateRequest,
   controller.updateStudentApproval
 );
+router.get("/instructors/pending", controller.getPendingInstructors);
+router.patch(
+  "/instructors/:id/approval",
+  validateId,
+  body("approval_status")
+    .isIn(["approved", "rejected"])
+    .withMessage("approval_status must be approved or rejected."),
+  body("reason")
+    .optional({ nullable: true })
+    .isString()
+    .withMessage("reason must be text.")
+    .bail()
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage("reason must not exceed 1,000 characters."),
+  validateRequest,
+  controller.updateInstructorApproval
+);
+router.get("/accounts", controller.getManagedAccounts);
 router.get("/recent", controller.getRecentUsers);
 router.patch(
   "/:id",

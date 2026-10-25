@@ -3,7 +3,7 @@ require("dotenv").config();
 const assert = require("node:assert/strict");
 const { after, before, test } = require("node:test");
 const jwt = require("jsonwebtoken");
-const { RoomServiceClient } = require("livekit-server-sdk");
+const { RoomServiceClient, TrackSource } = require("livekit-server-sdk");
 const app = require("../src/server");
 const { pool } = require("../src/config/db");
 
@@ -13,6 +13,7 @@ let instructorId;
 let otherInstructorId;
 let studentId;
 let unenrolledStudentId;
+let adminId;
 let courseId;
 let otherCourseId;
 let enrollmentId;
@@ -21,6 +22,7 @@ let instructorToken;
 let studentToken;
 let otherInstructorToken;
 let unenrolledStudentToken;
+let adminToken;
 
 const previousLiveKitEnv = {
   url: process.env.LIVEKIT_URL,
@@ -74,6 +76,7 @@ before(async () => {
   otherInstructorId = await insertUser(`${suffix}-other`, "instructor");
   studentId = await insertUser(`${suffix}-student`, "student");
   unenrolledStudentId = await insertUser(`${suffix}-unenrolled`, "student");
+  adminId = await insertUser(`${suffix}-admin`, "admin");
 
   const course = await pool.query(
     `INSERT INTO courses (instructor_id, title, slug, description, status)
@@ -103,6 +106,7 @@ before(async () => {
   studentToken = signedToken(studentId);
   otherInstructorToken = signedToken(otherInstructorId);
   unenrolledStudentToken = signedToken(unenrolledStudentId);
+  adminToken = signedToken(adminId);
 
   server = app.listen(0, "127.0.0.1");
   await new Promise((resolve, reject) => {
@@ -133,6 +137,7 @@ after(async () => {
       otherInstructorId,
       studentId,
       unenrolledStudentId,
+      adminId,
     ].filter(Boolean);
     if (userIds.length) {
       await pool.query("DELETE FROM users WHERE id = ANY($1::bigint[])", [
@@ -250,6 +255,14 @@ test("live classes enforce course permissions and issue scoped provider tokens",
     assert.ok(!grant.canPublishSources.includes("screen_share"));
   });
 
+  await t.test("administrators can review sessions but cannot enter classroom media", async () => {
+    const result = await request(`/live-classes/${liveClassId}/token`, {
+      token: adminToken,
+      method: "POST",
+    });
+    assert.equal(result.status, 403);
+  });
+
   await t.test("chat and hand-raise actions require class access and validate messages", async () => {
     const forbiddenMessage = await request(`/live-classes/${liveClassId}/chat`, {
       token: unenrolledStudentToken,
@@ -278,6 +291,130 @@ test("live classes enforce course permissions and issue scoped provider tokens",
       body: { message: "x".repeat(501) },
     });
     assert.equal(oversizedMessage.status, 400);
+  });
+
+  await t.test("classroom collaboration is persisted and role-scoped", async () => {
+    const originals = {
+      listParticipants: RoomServiceClient.prototype.listParticipants,
+      sendData: RoomServiceClient.prototype.sendData,
+      mutePublishedTrack: RoomServiceClient.prototype.mutePublishedTrack,
+      removeParticipant: RoomServiceClient.prototype.removeParticipant,
+    };
+    const moderated = [];
+    RoomServiceClient.prototype.listParticipants = async () => [
+      {
+        identity: `user-${studentId}`,
+        tracks: [{ source: TrackSource.MICROPHONE, sid: "TR_test_audio" }],
+      },
+      { identity: `user-${instructorId}`, tracks: [] },
+    ];
+    RoomServiceClient.prototype.sendData = async () => {};
+    RoomServiceClient.prototype.mutePublishedTrack = async (...args) => {
+      moderated.push(["mute", ...args]);
+    };
+    RoomServiceClient.prototype.removeParticipant = async (...args) => {
+      moderated.push(["remove", ...args]);
+    };
+
+    try {
+      const chat = await request(`/live-classes/${liveClassId}/chat`, {
+        token: studentToken,
+        method: "POST",
+        body: { message: "Saved classroom message" },
+      });
+      assert.equal(chat.status, 201);
+      assert.equal(chat.body.message.text, "Saved classroom message");
+
+      const history = await request(`/live-classes/${liveClassId}/chat`, {
+        token: studentToken,
+      });
+      assert.equal(history.status, 200);
+      assert.equal(history.body.messages.length, 1);
+      assert.equal(history.body.messages[0].text, "Saved classroom message");
+
+      const poll = await request(`/live-classes/${liveClassId}/polls`, {
+        token: instructorToken,
+        method: "POST",
+        body: { question: "Which topic next?", options: ["Databases", "Testing"] },
+      });
+      assert.equal(poll.status, 201);
+      const pollId = poll.body.poll.id;
+
+      const forbiddenPoll = await request(`/live-classes/${liveClassId}/polls`, {
+        token: otherInstructorToken,
+        method: "POST",
+        body: { question: "Unauthorized?", options: ["No", "Yes"] },
+      });
+      assert.equal(forbiddenPoll.status, 403);
+
+      const vote = await request(`/live-classes/${liveClassId}/polls/${pollId}/vote`, {
+        token: studentToken,
+        method: "POST",
+        body: { option_index: 1 },
+      });
+      assert.equal(vote.status, 201);
+      const duplicateVote = await request(
+        `/live-classes/${liveClassId}/polls/${pollId}/vote`,
+        { token: studentToken, method: "POST", body: { option_index: 0 } }
+      );
+      assert.equal(duplicateVote.status, 409);
+
+      const closedPoll = await request(`/live-classes/${liveClassId}/polls/${pollId}`, {
+        token: instructorToken,
+        method: "PATCH",
+        body: { status: "closed" },
+      });
+      assert.equal(closedPoll.status, 200);
+      const pollList = await request(`/live-classes/${liveClassId}/polls`, {
+        token: studentToken,
+      });
+      assert.deepEqual(pollList.body.polls[0].vote_counts.map(Number), [0, 1]);
+
+      const stroke = {
+        color: "#a5b4fc",
+        width: 4,
+        points: [{ x: 10, y: 20 }, { x: 30, y: 40 }],
+      };
+      const drawing = await request(`/live-classes/${liveClassId}/whiteboard`, {
+        token: studentToken,
+        method: "POST",
+        body: { event_type: "stroke", payload: stroke },
+      });
+      assert.equal(drawing.status, 201);
+
+      const attendance = await request(`/live-classes/${liveClassId}/attendance/join`, {
+        token: studentToken,
+        method: "POST",
+      });
+      assert.equal(attendance.status, 200);
+      const attendanceList = await request(`/live-classes/${liveClassId}/attendance`, {
+        token: instructorToken,
+      });
+      assert.equal(attendanceList.status, 200);
+      assert.equal(attendanceList.body.attendance[0].join_count, 1);
+      const leave = await request(`/live-classes/${liveClassId}/attendance/leave`, {
+        token: studentToken,
+        method: "POST",
+      });
+      assert.equal(leave.status, 200);
+
+      const muted = await request(
+        `/live-classes/${liveClassId}/participants/${studentId}/mute`,
+        { token: instructorToken, method: "POST" }
+      );
+      assert.equal(muted.status, 200);
+      const removed = await request(
+        `/live-classes/${liveClassId}/participants/${studentId}/remove`,
+        { token: instructorToken, method: "POST" }
+      );
+      assert.equal(removed.status, 200);
+      assert.deepEqual(moderated.map(([action]) => action), ["mute", "remove"]);
+    } finally {
+      RoomServiceClient.prototype.listParticipants = originals.listParticipants;
+      RoomServiceClient.prototype.sendData = originals.sendData;
+      RoomServiceClient.prototype.mutePublishedTrack = originals.mutePublishedTrack;
+      RoomServiceClient.prototype.removeParticipant = originals.removeParticipant;
+    }
   });
 
   await t.test("ending a class deletes its LiveKit room and rejects unauthorized users", async () => {

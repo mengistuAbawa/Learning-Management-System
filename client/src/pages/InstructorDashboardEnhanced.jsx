@@ -9,15 +9,13 @@ import {
   Users,
   UserRound,
   Clock,
-  Bell,
   Search,
-  MoreVertical,
   Download,
-  Eye,
   Edit2,
   PlusCircle,
-  Moon,
-  Sun,
+  Menu,
+  CalendarDays,
+  GraduationCap,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -25,6 +23,8 @@ import { getAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
 import CourseVideoRecorder from "../components/CourseVideoRecorder";
 import DashboardSidebar from "../components/DashboardSidebar";
+import DashboardThemeToggle from "../components/DashboardThemeToggle";
+import NotificationBell from "../components/NotificationBell";
 
 export default function InstructorDashboardEnhanced() {
   const { user, logout } = useAuth();
@@ -35,7 +35,11 @@ export default function InstructorDashboardEnhanced() {
   const [analytics, setAnalytics] = useState(null);
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [showStudentCoursePicker, setShowStudentCoursePicker] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [quickActionError, setQuickActionError] = useState("");
+  const [courseSearch, setCourseSearch] = useState("");
+  const [courseStatusFilter, setCourseStatusFilter] = useState("all");
   const [darkTheme, setDarkTheme] = useState(
     () => localStorage.getItem("learnsphere-instructor-theme") === "dark"
   );
@@ -96,6 +100,15 @@ export default function InstructorDashboardEnhanced() {
   function handleLogout() {
     logout();
     navigate("/login", { replace: true });
+  }
+
+  function handleSidebarAction(action) {
+    if (action === "video-lessons") {
+      document.getElementById("video-lessons")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
   }
 
   function downloadReports() {
@@ -179,17 +192,16 @@ export default function InstructorDashboardEnhanced() {
     );
   }
 
-  const totalStudents = courses.reduce(
-    (acc, course) => acc + (course.enrollment_count || 0),
-    0,
-  );
-
-  // Mock announcement
-  const announcement = {
-    author: "Mr.Khalid Mostafa",
-    text: "Hi my heroes! I just want you ready to our exams and focus on remaining assessments",
-    time: "2 hours ago",
-  };
+  const summary = analytics?.summary || {};
+  const totalStudents = Number(summary.totalStudents) || 0;
+  const visibleCourses = courses.filter((course) => {
+    const matchesSearch = course.title
+      ?.toLowerCase()
+      .includes(courseSearch.trim().toLowerCase());
+    const matchesStatus =
+      courseStatusFilter === "all" || course.status === courseStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div
@@ -200,6 +212,15 @@ export default function InstructorDashboardEnhanced() {
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+          <button
+            type="button"
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+            aria-label="Open instructor navigation"
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
           <Link to="/instructor-dashboard" className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-cyan-700">
               <BookOpen className="h-5 w-5 text-white" />
@@ -215,39 +236,27 @@ export default function InstructorDashboardEnhanced() {
               <input
                 type="text"
                 placeholder="Search courses..."
+                value={courseSearch}
+                onChange={(event) => setCourseSearch(event.target.value)}
+                aria-label="Search your courses"
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm placeholder-slate-500 focus:border-cyan-500 focus:bg-white focus:outline-none"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setDarkTheme((theme) => !theme)}
-              aria-label={`Switch to ${darkTheme ? "light" : "dark"} theme`}
-              aria-pressed={darkTheme}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              {darkTheme ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              <span className="hidden sm:inline">
-                {darkTheme ? "Light theme" : "Dark theme"}
-              </span>
-            </button>
             <Link
               to="/live-classes"
               className="rounded-lg px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50"
             >
               Live classes
             </Link>
-            <button className="rounded-lg hover:bg-slate-100 p-2 relative">
-              <Bell className="h-5 w-5 text-slate-600" />
-              <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
-            </button>
+            <NotificationBell light />
 
-            <button className="rounded-lg hover:bg-slate-100 p-2 relative">
-              <BookOpen className="h-5 w-5 text-slate-600" />
-              <span className="absolute top-1 right-1 h-2 w-2 bg-blue-500 rounded-full" />
-            </button>
+            <DashboardThemeToggle
+              darkTheme={darkTheme}
+              onToggle={() => setDarkTheme((theme) => !theme)}
+            />
 
             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-gradient-to-br from-cyan-400 to-cyan-600">
               {user?.avatar_url ? (
@@ -274,7 +283,16 @@ export default function InstructorDashboardEnhanced() {
       </header>
 
       <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-start lg:px-6">
-        <DashboardSidebar role="instructor" />
+        <DashboardSidebar
+          role="instructor"
+          responsive
+          mobileOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
+          onAction={handleSidebarAction}
+          counts={{ pendingGrading: summary.pendingGradingTotal }}
+        />
         <main className="min-w-0 flex-1 py-2">
         {/* Error Alert */}
         {error && (
@@ -290,8 +308,8 @@ export default function InstructorDashboardEnhanced() {
         <CourseVideoRecorder courses={courses} />
 
         {/* Welcome & Stats Header */}
-        <div className="mb-8 grid gap-6 lg:grid-cols-4">
-          <div className="lg:col-span-3 rounded-xl border border-slate-200 bg-gradient-to-r from-cyan-500 to-cyan-600 p-6 text-white shadow-lg">
+        <div className="mb-8">
+          <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-cyan-500 to-cyan-600 p-6 text-white shadow-lg">
             <h1 className="text-3xl font-bold">Welcome {firstName}!</h1>
             <p className="mt-2 text-cyan-100">
               Manage your courses and track student progress
@@ -304,26 +322,37 @@ export default function InstructorDashboardEnhanced() {
               Create New Course
             </Link>
           </div>
-
-          {/* Stats Cards */}
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {[
             {
               label: "Total Courses",
-              value: courses.length,
+              value: summary.totalCourses ?? courses.length,
               icon: BookOpen,
               color: "from-blue-100 to-blue-200 text-blue-600",
             },
             {
-              label: "Active Students",
+              label: "Unique Students",
               value: totalStudents,
               icon: Users,
               color: "from-indigo-100 to-indigo-200 text-indigo-600",
             },
             {
-              label: "Pending Work",
-              value: pendingSubmissions.length,
+              label: "Total Enrollments",
+              value: summary.totalEnrollments ?? 0,
+              icon: GraduationCap,
+              color: "from-violet-100 to-violet-200 text-violet-600",
+            },
+            {
+              label: "Pending Grading",
+              value: summary.pendingGradingTotal ?? pendingSubmissions.length,
               icon: Clock,
               color: "from-orange-100 to-orange-200 text-orange-600",
+            },
+            {
+              label: "Upcoming Classes",
+              value: summary.upcomingClasses ?? 0,
+              icon: CalendarDays,
+              color: "from-emerald-100 to-emerald-200 text-emerald-600",
             },
           ].map((stat, idx) => {
             const Icon = stat.icon;
@@ -344,6 +373,7 @@ export default function InstructorDashboardEnhanced() {
               </div>
             );
           })}
+          </div>
         </div>
 
         {/* Main Content */}
@@ -356,21 +386,31 @@ export default function InstructorDashboardEnhanced() {
                 <h2 className="text-xl font-bold text-slate-900">
                   Your Courses
                 </h2>
-                <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-                  <option>All</option>
-                  <option>Published</option>
-                  <option>Draft</option>
+                <select
+                  aria-label="Filter courses by publication status"
+                  value={courseStatusFilter}
+                  onChange={(event) => setCourseStatusFilter(event.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600"
+                >
+                  <option value="all">All</option>
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                  <option value="archived">Archived</option>
                 </select>
               </div>
 
-              {courses.length === 0 ? (
+              {visibleCourses.length === 0 ? (
                 <div className="rounded-xl border border-slate-200 bg-white p-8 text-center">
                   <LayoutGrid className="mx-auto h-12 w-12 text-slate-300 mb-3" />
-                  <p className="text-slate-600">No courses yet</p>
+                  <p className="text-slate-600">
+                    {courses.length === 0
+                      ? "No courses yet"
+                      : "No courses match the selected filters."}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {courses.map((course) => (
+                  {visibleCourses.map((course) => (
                     <div
                       key={course.id}
                       className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 hover:border-cyan-300 hover:shadow-md transition"
@@ -386,7 +426,7 @@ export default function InstructorDashboardEnhanced() {
                           </span>
                           <span className="flex items-center gap-1">
                             <CheckCircle2 className="h-4 w-4" />
-                            {course.lesson_count || 5} lessons
+                            {course.lesson_count ?? course.total_lessons ?? 0} lessons
                           </span>
                         </div>
                       </div>
@@ -400,9 +440,13 @@ export default function InstructorDashboardEnhanced() {
                         >
                           {course.status}
                         </span>
-                        <button className="rounded-lg p-2 hover:bg-slate-100">
-                          <MoreVertical className="h-4 w-4 text-slate-500" />
-                        </button>
+                        <Link
+                          to={`/courses/${course.id}/learn`}
+                          aria-label={`Manage ${course.title} course content`}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                        >
+                          Manage
+                        </Link>
                       </div>
                     </div>
                   ))}
@@ -440,12 +484,12 @@ export default function InstructorDashboardEnhanced() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                        <Link
+                          to={`/courses/${submission.course_id}/assignments`}
+                          className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                        >
                           Review
-                        </button>
-                        <button className="rounded-lg hover:bg-slate-100 p-2">
-                          <Eye className="h-4 w-4 text-slate-600" />
-                        </button>
+                        </Link>
                       </div>
                     </div>
                   ))}
@@ -456,52 +500,68 @@ export default function InstructorDashboardEnhanced() {
 
           {/* Right Sidebar */}
           <aside className="space-y-6">
-            {/* Latest Announcement */}
+            {/* Recent teaching activity */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="mb-4 font-bold text-slate-900">
-                Latest Announcement
+                Recent teaching activity
               </h3>
-              <div className="rounded-lg bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-900">
-                  {announcement.author}
+              {(analytics?.recentActivity || []).length === 0 ? (
+                <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+                  No course activity has been recorded yet.
                 </p>
-                <p className="mt-2 text-sm text-slate-600">
-                  {announcement.text}
-                </p>
-                <p className="mt-3 text-xs text-slate-500">
-                  {announcement.time}
-                </p>
-              </div>
-              <button className="mt-4 w-full rounded-lg border border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                + New Announcement
-              </button>
+              ) : (
+                <ul className="space-y-3">
+                  {analytics.recentActivity.slice(0, 5).map((activity, index) => (
+                    <li key={`${activity.type}-${activity.activity_at}-${index}`} className="rounded-lg bg-slate-50 p-3">
+                      <p className="text-sm font-semibold text-slate-900">{activity.title}</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {activity.course_title} · {activity.type.replaceAll("_", " ")}
+                      </p>
+                      <time className="mt-1 block text-xs text-slate-500" dateTime={activity.activity_at}>
+                        {new Date(activity.activity_at).toLocaleString()}
+                      </time>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link to="/analytics" className="mt-4 block text-sm font-semibold text-indigo-700 hover:underline">
+                View teaching analytics
+              </Link>
             </div>
 
             {/* Performance Stats */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="mb-4 font-bold text-slate-900">Performance</h3>
-              <div className="space-y-4">
+              {(summary.averageQuizPerformance === null &&
+                summary.courseCompletionRate === undefined &&
+                summary.averageGradePercentage === null) ? (
+                <p className="text-sm text-slate-600">
+                  Performance metrics will appear after learners submit work.
+                </p>
+              ) : (
+                <div className="space-y-4">
                 {[
-                  { label: "Student Engagement", value: "78%" },
-                  { label: "Assignment Completion", value: "85%" },
-                  { label: "Avg Score", value: "82%" },
-                ].map((stat, idx) => (
-                  <div key={idx}>
+                  { label: "Average quiz performance", value: summary.averageQuizPerformance },
+                  { label: "Course completion rate", value: summary.courseCompletionRate },
+                  { label: "Average assignment grade", value: summary.averageGradePercentage },
+                ].filter((stat) => stat.value !== null && stat.value !== undefined).map((stat) => (
+                  <div key={stat.label}>
                     <div className="mb-1 flex items-center justify-between text-sm">
                       <span className="text-slate-600">{stat.label}</span>
                       <span className="font-semibold text-slate-900">
-                        {stat.value}
+                        {stat.value}%
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-slate-200">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-600"
-                        style={{ width: stat.value }}
+                        style={{ width: `${Math.max(0, Math.min(100, Number(stat.value) || 0))}%` }}
                       />
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Quick Actions */}

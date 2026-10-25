@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import StudentDashboard from "./pages/StudentDashboardEnhanced";
 import InstructorDashboard from "./pages/InstructorDashboardEnhanced";
 import AdminDashboard from "./pages/AdminDashboardEnhanced";
+import AdminManagementPage from "./pages/AdminManagementPage";
 import Courses from "./pages/Courses";
 import CourseContent from "./pages/CourseContent";
 import CourseDetail from "./pages/CourseDetail";
@@ -22,6 +23,7 @@ import Analytics from "./pages/Analytics";
 import MyCertificates from "./pages/MyCertificates";
 import VerifyCertificate from "./pages/VerifyCertificate";
 import LiveClasses from "./pages/LiveClasses";
+import InstructorCalendar from "./pages/InstructorCalendar";
 const LiveClassroom = lazy(() => import("./pages/LiveClassroom"));
 
 import ProtectedRoute, {
@@ -89,10 +91,26 @@ export default function App() {
             </RoleRoute>
           }
         />
+        <Route
+          path="/admin/:section"
+          element={
+            <RoleRoute allowedRoles={["admin"]}>
+              <AdminManagementPage />
+            </RoleRoute>
+          }
+        />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/certificates" element={<MyCertificates />} />
         <Route path="/live-classes" element={<LiveClasses />} />
+        <Route
+          path="/instructor/calendar"
+          element={
+            <RoleRoute allowedRoles={["instructor"]}>
+              <InstructorCalendar />
+            </RoleRoute>
+          }
+        />
         <Route
           path="/live-classes/:classId/room"
           element={

@@ -66,13 +66,16 @@ async function authenticate(req, res, next) {
       });
     }
 
-    if (user.role === "student" && user.approval_status !== "approved") {
+    if (
+      ["student", "instructor"].includes(user.role) &&
+      user.approval_status !== "approved"
+    ) {
       return res.status(403).json({
         success: false,
         message:
           user.approval_status === "rejected"
-            ? "Your student registration was not approved. Contact an administrator."
-            : "Your student registration is awaiting administrator approval.",
+            ? `Your ${user.role} application was not approved. Contact an administrator.`
+            : `Your ${user.role} application is awaiting administrator approval.`,
       });
     }
 

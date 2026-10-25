@@ -14,6 +14,9 @@ CREATE TABLE users (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     approval_status VARCHAR(20) NOT NULL DEFAULT 'approved'
         CHECK (approval_status IN ('pending', 'approved', 'rejected')),
+    approval_reviewed_at TIMESTAMPTZ,
+    approval_reviewed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    approval_reason TEXT,
     email_verified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -44,6 +47,7 @@ CREATE TABLE courses (
 CREATE TABLE course_categories (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
+    description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

@@ -3,7 +3,7 @@ import { Bell, LoaderCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getUnreadNotificationCount } from "../services/notificationService";
 
-export default function NotificationBell() {
+export default function NotificationBell({ light = false }) {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -46,7 +46,11 @@ export default function NotificationBell() {
           : `Notifications${count ? `, ${count} unread` : ""}`
       }
       title={error || "Notifications"}
-      className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 hover:text-white"
+      className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+        light
+          ? "border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+          : "border-white/10 text-slate-300 hover:border-indigo-400/30 hover:bg-indigo-400/10 hover:text-white"
+      }`}
     >
       {loading ? (
         <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />

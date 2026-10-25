@@ -17,6 +17,8 @@ let unenrolledStudentId;
 let adminId;
 let courseId;
 let otherCourseId;
+let lessonId;
+let otherLessonId;
 let enrollmentId;
 let videoId;
 let draftVideoId;
@@ -110,6 +112,28 @@ before(async () => {
     [otherInstructorId, `course-video-other-${suffix}`]
   );
   otherCourseId = otherCourse.rows[0].id;
+  const ownModule = await pool.query(
+    `INSERT INTO modules (course_id, title, position)
+     VALUES ($1, 'Video lesson module', 1) RETURNING id`,
+    [courseId]
+  );
+  const ownLesson = await pool.query(
+    `INSERT INTO lessons (module_id, title, position)
+     VALUES ($1, 'Recorded lesson', 1) RETURNING id`,
+    [ownModule.rows[0].id]
+  );
+  lessonId = ownLesson.rows[0].id;
+  const otherModule = await pool.query(
+    `INSERT INTO modules (course_id, title, position)
+     VALUES ($1, 'Other video module', 1) RETURNING id`,
+    [otherCourseId]
+  );
+  const otherLesson = await pool.query(
+    `INSERT INTO lessons (module_id, title, position)
+     VALUES ($1, 'Other lesson', 1) RETURNING id`,
+    [otherModule.rows[0].id]
+  );
+  otherLessonId = otherLesson.rows[0].id;
 
   const enrollment = await pool.query(
     `INSERT INTO enrollments (student_id, course_id, status)
@@ -219,6 +243,26 @@ test("course video recording and playback enforce ownership and enrollment", asy
     assert.equal(created.status, 201);
     videoId = created.body.video.id;
     createdVideoIds.push(videoId);
+
+    const linkedForm = validWebmForm("Module video lesson");
+    linkedForm.append("lesson_id", String(lessonId));
+    const linked = await request(`/course-videos/courses/${courseId}`, {
+      token: signedToken(instructorId),
+      method: "POST",
+      body: linkedForm,
+    });
+    assert.equal(linked.status, 201);
+    assert.equal(String(linked.body.video.lesson_id), String(lessonId));
+    createdVideoIds.push(linked.body.video.id);
+
+    const crossCourseForm = validWebmForm("Wrong course lesson");
+    crossCourseForm.append("lesson_id", String(otherLessonId));
+    const crossCourse = await request(`/course-videos/courses/${courseId}`, {
+      token: signedToken(instructorId),
+      method: "POST",
+      body: crossCourseForm,
+    });
+    assert.equal(crossCourse.status, 400);
   });
 
   await t.test("instructors can save a private draft and publish it later", async () => {
@@ -304,6 +348,56 @@ test("course video recording and playback enforce ownership and enrollment", asy
     assert.equal(unenrolled.status, 200);
     assert.ok(
       !unenrolled.body.videos.some((video) => String(video.id) === String(videoId))
+    );
+  });
+
+  await t.test("video progress is enrolled-student scoped and owner analytics are real", async () => {
+    const forbidden = await request(`/course-videos/${videoId}/progress`, {
+      token: signedToken(unenrolledStudentId),
+      method: "PATCH",
+      body: { position_seconds: 12, duration_seconds: 100 },
+    });
+    assert.equal(forbidden.status, 404);
+
+    const saved = await request(`/course-videos/${videoId}/progress`, {
+      token: signedToken(studentId),
+      method: "PATCH",
+      body: { position_seconds: 92, duration_seconds: 100 },
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.progress.completed, true);
+
+    const read = await request(`/course-videos/${videoId}/progress`, {
+      token: signedToken(studentId),
+    });
+    assert.equal(read.status, 200);
+    assert.equal(Number(read.body.progress.last_position_seconds), 92);
+
+    const analytics = await request(
+      `/course-videos/courses/${courseId}/analytics`,
+      { token: signedToken(instructorId) }
+    );
+    assert.equal(analytics.status, 200);
+    const videoAnalytics = analytics.body.analytics.find(
+      (item) => String(item.video_id) === String(videoId)
+    );
+    assert.equal(Number(videoAnalytics.enrolled_students), 1);
+    assert.equal(Number(videoAnalytics.started_students), 1);
+    assert.equal(Number(videoAnalytics.completed_students), 1);
+
+    assert.equal(
+      (await request(`/course-videos/courses/${courseId}/analytics`, {
+        token: signedToken(otherInstructorId),
+      })).status,
+      404
+    );
+    assert.equal(
+      (await request(`/course-videos/${videoId}/progress`, {
+        token: signedToken(studentId),
+        method: "PATCH",
+        body: { position_seconds: 1000, duration_seconds: 100 },
+      })).status,
+      400
     );
   });
 

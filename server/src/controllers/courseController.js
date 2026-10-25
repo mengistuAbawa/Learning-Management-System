@@ -642,16 +642,19 @@ async function getCategories(req, res) {
     const values = user.role === "instructor" ? [user.id] : [];
     const result = await pool.query(
       `WITH category_names AS (
-         SELECT LOWER(BTRIM(name)) AS category_key, MIN(BTRIM(name)) AS category
+         SELECT LOWER(BTRIM(name)) AS category_key,
+                MIN(BTRIM(name)) AS category,
+                MAX(description) AS description
          FROM (
-           SELECT name FROM course_categories
+           SELECT name, description FROM course_categories
            UNION ALL
-           SELECT category FROM courses
+           SELECT category, NULL::text AS description FROM courses
          ) names
          WHERE name IS NOT NULL AND BTRIM(name) <> ''
          GROUP BY LOWER(BTRIM(name))
        )
-       SELECT names.category, COUNT(c.id)::int AS course_count
+       SELECT names.category, MAX(names.description) AS description,
+              COUNT(c.id)::int AS course_count
        FROM category_names names
        LEFT JOIN courses c
          ON LOWER(BTRIM(c.category)) = names.category_key
@@ -677,6 +680,12 @@ async function getCategories(req, res) {
 
 async function createCategory(req, res) {
   const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const description =
+    req.body?.description === undefined || req.body.description === null
+      ? null
+      : typeof req.body.description === "string"
+        ? req.body.description.trim()
+        : undefined;
 
   if (name.length < 2 || name.length > 100) {
     return res.status(400).json({
@@ -684,18 +693,31 @@ async function createCategory(req, res) {
       message: "Category name must contain between 2 and 100 characters.",
     });
   }
+  if (
+    description === undefined ||
+    (description !== null && description.length > 2000)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Category description must be text of at most 2,000 characters.",
+    });
+  }
 
   try {
     const result = await pool.query(
-      `INSERT INTO course_categories (name)
-       VALUES ($1)
-       RETURNING name`,
-      [name],
+      `INSERT INTO course_categories (name, description)
+       VALUES ($1, $2)
+       RETURNING name, description`,
+      [name, description],
     );
 
     return res.status(201).json({
       success: true,
-      category: { name: result.rows[0].name, course_count: 0 },
+      category: {
+        name: result.rows[0].name,
+        description: result.rows[0].description,
+        course_count: 0,
+      },
     });
   } catch (error) {
     if (error.code === "23505") {
@@ -713,6 +735,154 @@ async function createCategory(req, res) {
   }
 }
 
+async function updateCategory(req, res) {
+  const currentName =
+    typeof req.params.name === "string" ? req.params.name.trim() : "";
+  const newName = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const description =
+    req.body?.description === undefined
+      ? undefined
+      : req.body.description === null
+        ? null
+        : typeof req.body.description === "string"
+          ? req.body.description.trim()
+          : false;
+
+  if (currentName.length < 2 || currentName.length > 100) {
+    return res.status(400).json({
+      success: false,
+      message: "Current category name must contain between 2 and 100 characters.",
+    });
+  }
+  if (newName.length < 2 || newName.length > 100) {
+    return res.status(400).json({
+      success: false,
+      message: "Category name must contain between 2 and 100 characters.",
+    });
+  }
+  if (
+    description === false ||
+    (description !== undefined && description !== null && description.length > 2000)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Category description must be text of at most 2,000 characters.",
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const category = await client.query(
+      `SELECT name
+       FROM course_categories
+       WHERE LOWER(BTRIM(name)) = LOWER(BTRIM($1))
+       FOR UPDATE`,
+      [currentName]
+    );
+    if (!category.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        success: false,
+        message: "Managed category not found.",
+      });
+    }
+
+    const oldName = category.rows[0].name;
+    await client.query(
+      `UPDATE courses
+       SET category = $2, updated_at = NOW()
+       WHERE LOWER(BTRIM(category)) = LOWER(BTRIM($1))`,
+      [oldName, newName]
+    );
+    const result = await client.query(
+      `UPDATE course_categories
+       SET name = $2,
+           description = CASE WHEN $3::boolean THEN $4 ELSE description END
+       WHERE LOWER(BTRIM(name)) = LOWER(BTRIM($1))
+       RETURNING name, description`,
+      [oldName, newName, description !== undefined, description ?? null]
+    );
+    await client.query("COMMIT");
+    return res.json({
+      success: true,
+      category: {
+        name: result.rows[0].name,
+        description: result.rows[0].description,
+      },
+      message: "Category updated successfully.",
+    });
+  } catch (error) {
+    if (client) await client.query("ROLLBACK");
+    if (error.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        message: "A category with this name already exists.",
+      });
+    }
+    console.error("Update category error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update category.",
+    });
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function deleteCategory(req, res) {
+  const name = typeof req.params.name === "string" ? req.params.name.trim() : "";
+  if (name.length < 2 || name.length > 100) {
+    return res.status(400).json({
+      success: false,
+      message: "Category name must contain between 2 and 100 characters.",
+    });
+  }
+
+  try {
+    const category = await pool.query(
+      `SELECT name
+       FROM course_categories
+       WHERE LOWER(BTRIM(name)) = LOWER(BTRIM($1))`,
+      [name]
+    );
+    if (!category.rowCount) {
+      return res.status(404).json({
+        success: false,
+        message: "Managed category not found.",
+      });
+    }
+
+    const inUse = await pool.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM courses
+         WHERE LOWER(BTRIM(category)) = LOWER(BTRIM($1))
+       ) AS in_use`,
+      [category.rows[0].name]
+    );
+    if (inUse.rows[0].in_use) {
+      return res.status(409).json({
+        success: false,
+        message: "This category is assigned to courses. Reassign those courses before deleting it.",
+      });
+    }
+
+    await pool.query(
+      `DELETE FROM course_categories
+       WHERE LOWER(BTRIM(name)) = LOWER(BTRIM($1))`,
+      [category.rows[0].name]
+    );
+    return res.json({ success: true, message: "Category deleted." });
+  } catch (error) {
+    console.error("Delete category error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to delete category.",
+    });
+  }
+}
+
 module.exports = {
   listCourses,
   getCourseById,
@@ -722,4 +892,6 @@ module.exports = {
   listCategories,
   getCategories,
   createCategory,
+  updateCategory,
+  deleteCategory,
 };

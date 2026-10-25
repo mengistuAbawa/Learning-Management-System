@@ -16,6 +16,11 @@ router.post(
   controller.createAssignment
 );
 
+router.get(
+  "/assignments/submissions/pending",
+  controller.listPendingSubmissions
+);
+
 router.post(
   "/assignments/:assignmentId/submit",
   controller.submitAssignment

@@ -1,6 +1,7 @@
 
 const express = require("express");
 const { authenticate, authorize } = require("../middleware/auth");
+const { auditAdminAction } = require("../middleware/adminAudit");
 const controller = require("../controllers/enrollmentController");
 
 const router = express.Router();
@@ -11,6 +12,7 @@ router.post("/courses/:courseId", controller.enrollInCourse);
 router.post(
   "/courses/:courseId/students",
   authorize("admin"),
+  auditAdminAction,
   controller.enrollStudentAsAdmin
 );
 router.get("/my", controller.getMyEnrollments);

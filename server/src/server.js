@@ -19,6 +19,8 @@ const analyticsRoutes = require("./routes/analyticsRoutes");
 const certificateRoutes = require("./routes/certificateRoutes");
 const liveClassRoutes = require("./routes/liveClassRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
+const adminPlatformRoutes = require("./routes/adminPlatformRoutes");
+const adminDashboardRoutes = require("./routes/adminDashboardRoutes");
 const courseVideoRoutes = require("./routes/courseVideoRoutes");
 
 const app = express();
@@ -95,6 +97,8 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/certificates", certificateRoutes);
 app.use("/api/live-classes", liveClassRoutes);
 app.use("/api/users", adminUserRoutes);
+app.use("/api/admin", adminPlatformRoutes);
+app.use("/api/admin/dashboard", adminDashboardRoutes);
 app.get("/", (req, res) => {
   res.json({
     success: true,

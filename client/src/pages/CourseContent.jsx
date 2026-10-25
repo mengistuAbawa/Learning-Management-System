@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import LessonProgressPanel from "../components/LessonProgressPanel";
 import {
@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
+import api from "../services/api";
 import { getCourseById } from "../services/courseService";
 import {
   createModule,
@@ -330,6 +331,11 @@ export default function CourseContent() {
   const [lessonsByModule, setLessonsByModule] = useState({});
   const [expanded, setExpanded] = useState({});
   const [selectedLesson, setSelectedLesson] = useState(null);
+  const [courseVideos, setCourseVideos] = useState([]);
+  const [lessonPlaybackUrl, setLessonPlaybackUrl] = useState("");
+  const [videoPlaybackError, setVideoPlaybackError] = useState("");
+  const [videoProgressMessage, setVideoProgressMessage] = useState("");
+  const lastVideoProgressPosition = useRef({});
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -345,9 +351,19 @@ export default function CourseContent() {
     try {
       const courseResult = await getCourseById(courseId);
       const moduleResult = await getModules(courseId);
+      let availableVideos = [];
+      try {
+        const videoResult = await api.get("/course-videos");
+        availableVideos = (videoResult.data.videos || []).filter(
+          (video) => String(video.course_id) === String(courseId)
+        );
+      } catch {
+        // A separate course recording list must not block access to text lessons.
+      }
 
       setCourse(courseResult.course);
       setModules(moduleResult.modules || []);
+      setCourseVideos(availableVideos);
 
       const lessonResults = await Promise.all(
         (moduleResult.modules || []).map(async (module) => {
@@ -492,6 +508,9 @@ export default function CourseContent() {
   async function openLesson(lesson) {
     setError("");
     setNotice("");
+    setLessonPlaybackUrl("");
+    setVideoPlaybackError("");
+    setVideoProgressMessage("");
 
     try {
       const result = await getLessonById(lesson.id);
@@ -499,6 +518,66 @@ export default function CourseContent() {
     } catch (lessonError) {
       setSelectedLesson(null);
       setError(errorText(lessonError));
+    }
+  }
+
+  const linkedVideo = courseVideos.find(
+    (video) => String(video.lesson_id) === String(selectedLesson?.id)
+  );
+
+  async function playLinkedVideo(video) {
+    setVideoPlaybackError("");
+    try {
+      const response = await api.post(`/course-videos/${video.id}/playback`);
+      const baseUrl = new URL(
+        api.defaults.baseURL,
+        window.location.origin
+      ).toString().replace(/\/?$/, "/");
+      setLessonPlaybackUrl(new URL(response.data.path, baseUrl).toString());
+    } catch (playError) {
+      setVideoPlaybackError(
+        playError.response?.data?.message ||
+          "The recorded lesson could not be opened."
+      );
+    }
+  }
+
+  function resumeLinkedVideo(video, element) {
+    const position = Number(video.last_position_seconds) || 0;
+    if (
+      position > 0 &&
+      Number.isFinite(element.duration) &&
+      position < element.duration - 2
+    ) {
+      element.currentTime = position;
+    }
+  }
+
+  async function saveLinkedVideoProgress(video, element, force = false) {
+    if (!element || !Number.isFinite(element.duration) || element.duration <= 0) return;
+    const position = Math.floor(element.currentTime);
+    if (
+      !force &&
+      position - (lastVideoProgressPosition.current[video.id] ?? 0) < 15
+    ) return;
+    lastVideoProgressPosition.current[video.id] = position;
+    try {
+      const response = await api.patch(`/course-videos/${video.id}/progress`, {
+        position_seconds: position,
+        duration_seconds: Math.floor(element.duration),
+      });
+      setCourseVideos((current) =>
+        current.map((item) =>
+          item.id === video.id ? { ...item, ...response.data.progress } : item
+        )
+      );
+      setVideoProgressMessage(
+        response.data.progress.completed ? "Video lesson completed." : "Progress saved."
+      );
+    } catch (progressError) {
+      setVideoProgressMessage(
+        progressError.response?.data?.message || "Video progress could not be saved."
+      );
     }
   }
 
@@ -845,6 +924,66 @@ export default function CourseContent() {
                       </span>
                     )}
                   </div>
+
+                  {linkedVideo && (
+                    <section className="mt-5 rounded-xl border border-indigo-400/20 bg-slate-950 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-white">{linkedVideo.title}</p>
+                          {linkedVideo.description && (
+                            <p className="mt-1 text-sm text-slate-400">{linkedVideo.description}</p>
+                          )}
+                        </div>
+                        {!lessonPlaybackUrl && (
+                          <button
+                            type="button"
+                            onClick={() => playLinkedVideo(linkedVideo)}
+                            className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                          >
+                            Play recorded lesson
+                          </button>
+                        )}
+                      </div>
+                      {videoPlaybackError && (
+                        <p role="alert" className="mt-3 text-sm text-rose-300">{videoPlaybackError}</p>
+                      )}
+                      {lessonPlaybackUrl && (
+                        <video
+                          controls
+                          playsInline
+                          src={lessonPlaybackUrl}
+                          onLoadedMetadata={(event) =>
+                            resumeLinkedVideo(linkedVideo, event.currentTarget)
+                          }
+                          onTimeUpdate={(event) =>
+                            saveLinkedVideoProgress(linkedVideo, event.currentTarget)
+                          }
+                          onPause={(event) =>
+                            saveLinkedVideoProgress(linkedVideo, event.currentTarget, true)
+                          }
+                          onEnded={(event) =>
+                            saveLinkedVideoProgress(linkedVideo, event.currentTarget, true)
+                          }
+                          onError={() =>
+                            setVideoPlaybackError(
+                              "The recording is unavailable or its playback link expired. Reopen it to try again."
+                            )
+                          }
+                          className="mt-4 w-full rounded-lg bg-black"
+                        />
+                      )}
+                      {Number(linkedVideo.duration_seconds) > 0 && (
+                        <p className="mt-2 text-xs text-slate-400">
+                          {linkedVideo.completed
+                            ? "Completed"
+                            : `Resume at ${Math.floor(Number(linkedVideo.last_position_seconds) / 60)}:${String(Math.floor(Number(linkedVideo.last_position_seconds) % 60)).padStart(2, "0")}`}
+                        </p>
+                      )}
+                      {videoProgressMessage && (
+                        <p role="status" className="mt-2 text-xs text-slate-400">{videoProgressMessage}</p>
+                      )}
+                    </section>
+                  )}
 
                   {selectedLesson.video_url && (
                     <a

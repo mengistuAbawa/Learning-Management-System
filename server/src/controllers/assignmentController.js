@@ -250,6 +250,40 @@ async function listSubmissions(req, res, next) {
   }
 }
 
+async function listPendingSubmissions(req, res, next) {
+  if (!["instructor", "admin"].includes(req.user.role)) {
+    return fail(res, 403, "Only instructors can view submissions awaiting grading.");
+  }
+  const limit = Number(req.query.limit ?? 10);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+    return fail(res, 400, "Limit must be between 1 and 50.");
+  }
+
+  try {
+    const instructorId = req.user.role === "instructor" ? req.user.id : null;
+    const result = await pool.query(
+      `SELECT s.id, s.assignment_id, a.course_id,
+              s.student_id, s.submission_text, s.submission_url,
+              s.submitted_at, s.status,
+              a.title AS assignment_title, a.max_points, a.due_at,
+              c.title AS course_title,
+              u.full_name AS student_name
+       FROM assignment_submissions s
+       JOIN assignments a ON a.id = s.assignment_id
+       JOIN courses c ON c.id = a.course_id
+       JOIN users u ON u.id = s.student_id
+       WHERE ($1::bigint IS NULL OR c.instructor_id = $1)
+         AND s.grade IS NULL
+       ORDER BY s.submitted_at ASC, s.id ASC
+       LIMIT $2`,
+      [instructorId, limit]
+    );
+    return res.json({ success: true, submissions: result.rows });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function gradeSubmission(req, res, next) {
   try {
     const { submissionId } = req.params;
@@ -358,6 +392,7 @@ module.exports = {
   listAssignments,
   createAssignment,
   submitAssignment,
+  listPendingSubmissions,
   listSubmissions,
   gradeSubmission,
   getMySubmissions,

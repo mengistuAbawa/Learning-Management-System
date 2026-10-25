@@ -88,9 +88,9 @@ CREATE INDEX IF NOT EXISTS idx_assignments_published
     ON assignments(course_id, is_published)
     WHERE is_published = TRUE;
 
-CREATE INDEX IF NOT EXISTS idx_assignment_submissions_graded
-    ON assignment_submissions(assignment_id, student_id, grade)
-    WHERE grade IS NOT NULL;
+-- Assignment grading column/index alignment is applied by
+-- 20261025_assignment_schema_alignment.sql. The bootstrap column is named
+-- "score", so do not reference the later API column "grade" in this migration.
 
 CREATE INDEX IF NOT EXISTS idx_lesson_progress_completed
     ON lesson_progress(enrollment_id, completed)

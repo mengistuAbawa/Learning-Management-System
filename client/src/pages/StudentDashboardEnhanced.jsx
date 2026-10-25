@@ -22,13 +22,12 @@ import {
   BarChart3,
   MessageCircle,
   Star,
-  Moon,
-  Sun,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NotificationBell from "../components/NotificationBell";
 import DashboardSidebar from "../components/DashboardSidebar";
+import DashboardThemeToggle from "../components/DashboardThemeToggle";
 import {
   getMyEnrollments,
   getCourseEnrollments,
@@ -174,18 +173,6 @@ export default function StudentDashboardEnhanced() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setDarkTheme((theme) => !theme)}
-              aria-label={`Switch to ${darkTheme ? "light" : "dark"} theme`}
-              aria-pressed={darkTheme}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              {darkTheme ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              <span className="hidden sm:inline">
-                {darkTheme ? "Light theme" : "Dark theme"}
-              </span>
-            </button>
             <Link
               to="/live-classes"
               className="rounded-lg px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
@@ -198,6 +185,11 @@ export default function StudentDashboardEnhanced() {
               <Bell className="h-5 w-5 text-slate-600" />
               <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
             </button>
+
+            <DashboardThemeToggle
+              darkTheme={darkTheme}
+              onToggle={() => setDarkTheme((theme) => !theme)}
+            />
 
             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-gradient-to-br from-indigo-400 to-indigo-600">
               {user?.avatar_url ? (

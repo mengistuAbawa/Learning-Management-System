@@ -559,6 +559,37 @@ async function getStudentAnalytics(userId) {
 }
 
 async function getInstructorAnalytics(userId) {
+  const instructorSnapshotQuery = `
+    SELECT
+      (SELECT COUNT(DISTINCT e.student_id)::int
+       FROM enrollments e
+       JOIN courses c ON c.id = e.course_id
+       WHERE c.instructor_id = $1
+         AND e.status IN ('active', 'completed')) AS total_students,
+      (SELECT COUNT(*)::int
+       FROM live_classes lc
+       WHERE lc.instructor_id = $1
+         AND lc.status = 'scheduled'
+         AND lc.scheduled_at >= NOW()) AS upcoming_classes,
+      (SELECT COUNT(*)::int
+       FROM assignments a
+       JOIN courses c ON c.id = a.course_id
+       WHERE c.instructor_id = $1
+         AND a.due_at >= NOW()) AS upcoming_assignment_deadlines,
+      (SELECT COUNT(*)::int
+       FROM quizzes q
+       JOIN courses c ON c.id = q.course_id
+       WHERE c.instructor_id = $1
+         AND q.is_published = TRUE
+         AND q.opens_at >= NOW()) AS upcoming_quiz_openings,
+      (SELECT COUNT(*)::int
+       FROM quiz_attempts qa
+       JOIN quizzes q ON q.id = qa.quiz_id
+       JOIN courses c ON c.id = q.course_id
+       WHERE c.instructor_id = $1
+         AND qa.status = 'submitted'
+         AND qa.grading_status = 'pending_manual') AS pending_quiz_grading
+  `;
   const coursesQuery = `
     SELECT
       c.id AS course_id,
@@ -822,6 +853,7 @@ async function getInstructorAnalytics(userId) {
     gradingResult,
     recentGradingResult,
     monthlyActivityResult,
+    snapshotResult,
   ] = await Promise.all([
     pool.query(coursesQuery, [userId]),
     pool.query(courseProgressQuery, [userId]),
@@ -829,6 +861,7 @@ async function getInstructorAnalytics(userId) {
     pool.query(gradingQuery, [userId]),
     pool.query(recentGradingQuery, [userId]),
     pool.query(monthlyActivityQuery, [userId]),
+    pool.query(instructorSnapshotQuery, [userId]),
   ]);
 
   const courses = coursesResult.rows;
@@ -883,6 +916,15 @@ async function getInstructorAnalytics(userId) {
     summary: {
       totalCourses: courses.length,
       ...totals,
+      totalStudents: Number(snapshotResult.rows[0].total_students),
+      upcomingClasses: Number(snapshotResult.rows[0].upcoming_classes),
+      upcomingAssignmentDeadlines: Number(
+        snapshotResult.rows[0].upcoming_assignment_deadlines,
+      ),
+      upcomingQuizOpenings: Number(snapshotResult.rows[0].upcoming_quiz_openings),
+      pendingQuizGrading: Number(snapshotResult.rows[0].pending_quiz_grading),
+      pendingGradingTotal:
+        totals.awaitingGrade + Number(snapshotResult.rows[0].pending_quiz_grading),
       averageGrade:
         grading.average_grade === null ? null : Number(grading.average_grade),
       averageGradePercentage:
@@ -1180,6 +1222,8 @@ async function getAdminAnalytics() {
       (SELECT COUNT(*)::int FROM modules) AS total_modules,
       (SELECT COUNT(*)::int FROM lessons) AS total_lessons,
       (SELECT COUNT(*)::int FROM enrollments) AS total_enrollments,
+      (SELECT COUNT(*)::int FROM enrollments
+        WHERE status IN ('active', 'completed')) AS eligible_enrollments,
       (SELECT COUNT(*)::int FROM enrollments WHERE status = 'active') AS active_enrollments,
       (SELECT COUNT(*)::int FROM enrollments WHERE status = 'completed') AS completed_enrollments,
       (SELECT COUNT(*)::int FROM lesson_progress WHERE completed = TRUE) AS completed_lesson_records,
@@ -1332,11 +1376,11 @@ async function getAdminAnalytics() {
   `);
 
   const summary = summaryResult.rows[0];
-  summary.course_completion_rate = Number(summary.total_enrollments)
+  summary.course_completion_rate = Number(summary.eligible_enrollments)
     ? Number(
         (
           (100 * Number(summary.completed_enrollments)) /
-          Number(summary.total_enrollments)
+          Number(summary.eligible_enrollments)
         ).toFixed(1),
       )
     : 0;
@@ -1390,8 +1434,116 @@ async function getAdminOverview(req, res, next) {
   }
 }
 
+async function getInstructorCalendar(req, res, next) {
+  if (req.user.role !== "instructor") {
+    return res.status(403).json({
+      success: false,
+      message: "Only instructors can view the teaching calendar.",
+    });
+  }
+
+  const now = new Date();
+  const defaultFrom = new Date(now);
+  defaultFrom.setHours(0, 0, 0, 0);
+  const defaultTo = new Date(defaultFrom);
+  defaultTo.setDate(defaultTo.getDate() + 90);
+  const from = req.query.from ? new Date(req.query.from) : defaultFrom;
+  const to = req.query.to ? new Date(req.query.to) : defaultTo;
+  if (
+    Number.isNaN(from.getTime()) ||
+    Number.isNaN(to.getTime()) ||
+    from >= to ||
+    to - from > 366 * 24 * 60 * 60 * 1000
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Provide a valid calendar range of no more than 366 days.",
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `WITH course_events AS (
+         SELECT
+           'live_class'::text AS event_type,
+           lc.id AS event_id,
+           c.id AS course_id,
+           c.title AS course_title,
+           lc.title,
+           lc.scheduled_at AS event_at,
+           lc.status,
+           lc.time_zone
+         FROM live_classes lc
+         JOIN courses c ON c.id = lc.course_id
+         WHERE c.instructor_id = $1
+           AND lc.status <> 'cancelled'
+
+         UNION ALL
+
+         SELECT
+           'quiz_opening'::text,
+           q.id,
+           c.id,
+           c.title,
+           q.title,
+           q.opens_at,
+           CASE WHEN q.is_published THEN 'published' ELSE 'draft' END,
+           NULL::text
+         FROM quizzes q
+         JOIN courses c ON c.id = q.course_id
+         WHERE c.instructor_id = $1 AND q.opens_at IS NOT NULL
+
+         UNION ALL
+
+         SELECT
+           'quiz_closing'::text,
+           q.id,
+           c.id,
+           c.title,
+           q.title,
+           q.closes_at,
+           CASE WHEN q.is_published THEN 'published' ELSE 'draft' END,
+           NULL::text
+         FROM quizzes q
+         JOIN courses c ON c.id = q.course_id
+         WHERE c.instructor_id = $1 AND q.closes_at IS NOT NULL
+
+         UNION ALL
+
+         SELECT
+           'assignment_due'::text,
+           a.id,
+           c.id,
+           c.title,
+           a.title,
+           a.due_at,
+           CASE WHEN a.is_published THEN 'published' ELSE 'draft' END,
+           NULL::text
+         FROM assignments a
+         JOIN courses c ON c.id = a.course_id
+         WHERE c.instructor_id = $1 AND a.due_at IS NOT NULL
+       )
+       SELECT event_type, event_id, course_id, course_title, title,
+              event_at, status, time_zone
+       FROM course_events
+       WHERE event_at >= $2 AND event_at < $3
+       ORDER BY event_at ASC, course_title, title`,
+      [req.user.id, from.toISOString(), to.toISOString()],
+    );
+
+    return res.json({
+      success: true,
+      range: { from: from.toISOString(), to: to.toISOString() },
+      events: result.rows,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getOverview,
   getAdminOverview,
   getInstructorStudentPerformance,
+  getInstructorCalendar,
 };

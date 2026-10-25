@@ -37,42 +37,118 @@ export default function CourseVideoRecorder({ courses }) {
   const streamRef = useRef(null);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const pendingPreviewUrlRef = useRef("");
   const cancelRecordingRef = useRef(false);
   const elapsedBeforeSegmentRef = useRef(0);
   const segmentStartedAtRef = useRef(null);
   const [courseId, setCourseId] = useState("");
   const [coursePickerOpen, setCoursePickerOpen] = useState(false);
+  const [availableLessons, setAvailableLessons] = useState([]);
+  const [lessonId, setLessonId] = useState("");
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [position, setPosition] = useState("");
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingPaused, setRecordingPaused] = useState(false);
   const [finalizingRecording, setFinalizingRecording] = useState(false);
   const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadAction, setUploadAction] = useState("");
   const [pendingRecording, setPendingRecording] = useState(null);
+  const [pendingPreviewUrl, setPendingPreviewUrl] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [videos, setVideos] = useState([]);
+  const [videoAnalytics, setVideoAnalytics] = useState({});
   const [playing, setPlaying] = useState({});
   const [editingVideoId, setEditingVideoId] = useState(null);
-  const [videoEdit, setVideoEdit] = useState({ title: "", status: "draft" });
+  const [videoEdit, setVideoEdit] = useState({
+    title: "",
+    description: "",
+    position: 1,
+    lesson_id: "",
+    status: "draft",
+  });
   const [savingVideoId, setSavingVideoId] = useState(null);
   const [deletingVideoId, setDeletingVideoId] = useState(null);
   const selectedCourse = courses.find(
     (course) => String(course.id) === String(courseId)
   );
+  const courseLessons = availableLessons.filter(
+    (lesson) => String(lesson.course_id) === String(courseId)
+  );
+
+  useEffect(() => {
+    let active = true;
+    async function loadLessons() {
+      try {
+        const courseModules = await Promise.all(
+          courses.map(async (course) => {
+            const response = await api.get(`/courses/${course.id}/modules`);
+            return (response.data.modules || []).map((module) => ({
+              ...module,
+              course_id: course.id,
+              course_title: course.title,
+            }));
+          })
+        );
+        const lessonsByModule = await Promise.all(
+          courseModules.flat().map(async (module) => {
+            const response = await api.get(`/modules/${module.id}/lessons`);
+            return (response.data.lessons || []).map((lesson) => ({
+              ...lesson,
+              course_id: module.course_id,
+              course_title: module.course_title,
+              module_title: module.title,
+            }));
+          })
+        );
+        if (active) setAvailableLessons(lessonsByModule.flat());
+      } catch {
+        if (active) setAvailableLessons([]);
+      }
+    }
+    void loadLessons();
+    return () => {
+      active = false;
+    };
+  }, [courses]);
 
   async function loadVideos() {
     const response = await api.get("/course-videos");
-    setVideos(response.data.videos || []);
+    const records = response.data.videos || [];
+    setVideos(records);
+    await loadVideoAnalytics(records);
+  }
+
+  async function loadVideoAnalytics(records) {
+    const courseIds = [...new Set(records.map((video) => String(video.course_id)))];
+    const results = await Promise.all(
+      courseIds.map(async (id) => {
+        try {
+          const response = await api.get(`/course-videos/courses/${id}/analytics`);
+          return response.data.analytics || [];
+        } catch {
+          return [];
+        }
+      })
+    );
+    setVideoAnalytics(
+      Object.fromEntries(results.flat().map((item) => [String(item.video_id), item]))
+    );
   }
 
   useEffect(() => {
     let active = true;
     api.get("/course-videos")
-      .then((response) => {
-        if (active) setVideos(response.data.videos || []);
+      .then(async (response) => {
+        if (active) {
+          const records = response.data.videos || [];
+          setVideos(records);
+          await loadVideoAnalytics(records);
+        }
       })
       .catch((loadError) => {
         if (active) {
@@ -89,8 +165,28 @@ export default function CourseVideoRecorder({ courses }) {
         recorderRef.current.stop();
       }
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      if (pendingPreviewUrlRef.current) {
+        URL.revokeObjectURL(pendingPreviewUrlRef.current);
+      }
     };
   }, []);
+
+  function previewBlob(blob) {
+    if (pendingPreviewUrlRef.current) {
+      URL.revokeObjectURL(pendingPreviewUrlRef.current);
+    }
+    pendingPreviewUrlRef.current = URL.createObjectURL(blob);
+    setPendingPreviewUrl(pendingPreviewUrlRef.current);
+  }
+
+  function clearPendingRecording() {
+    setPendingRecording(null);
+    if (pendingPreviewUrlRef.current) {
+      URL.revokeObjectURL(pendingPreviewUrlRef.current);
+      pendingPreviewUrlRef.current = "";
+    }
+    setPendingPreviewUrl("");
+  }
 
   useEffect(() => {
     if (!recording || finalizingRecording) return undefined;
@@ -198,8 +294,12 @@ export default function CourseVideoRecorder({ courses }) {
           blob,
           courseId,
           title: title.trim(),
+          description: description.trim(),
+          position,
+          lessonId,
           mediaType: recorder.mimeType || mimeType || "video/webm",
         });
+        previewBlob(blob);
         setMessage("Recording finished. Save it as a draft or send it to students.");
       };
       recorder.onerror = () => {
@@ -261,11 +361,15 @@ export default function CourseVideoRecorder({ courses }) {
   async function saveRecording(status) {
     if (!pendingRecording) return;
     setUploading(true);
+    setUploadProgress(0);
     setUploadAction(status);
     setError("");
     setMessage("");
     const form = new FormData();
     form.append("title", pendingRecording.title);
+    form.append("description", pendingRecording.description || "");
+    if (pendingRecording.position) form.append("position", pendingRecording.position);
+    if (pendingRecording.lessonId) form.append("lesson_id", pendingRecording.lessonId);
     form.append("status", status);
     const mediaType = pendingRecording.mediaType
       .split(";")[0]
@@ -281,9 +385,14 @@ export default function CourseVideoRecorder({ courses }) {
         {
           timeout: 10 * 60 * 1000,
           headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress: (event) => {
+            if (event.total) {
+              setUploadProgress(Math.round((event.loaded / event.total) * 100));
+            }
+          },
         }
       );
-      setPendingRecording(null);
+      clearPendingRecording();
       elapsedBeforeSegmentRef.current = 0;
       setRecordingElapsedMs(0);
       setMessage(
@@ -303,7 +412,44 @@ export default function CourseVideoRecorder({ courses }) {
     } finally {
       setUploading(false);
       setUploadAction("");
+      setUploadProgress(0);
     }
+  }
+
+  function chooseVideoFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+    if (!courseId) {
+      setError("Choose the course before selecting a video.");
+      return;
+    }
+    if (!title.trim()) {
+      setError("Enter a recording title before selecting a video.");
+      return;
+    }
+    const mediaType = file.type.toLowerCase();
+    const supported = ["video/webm", "video/mp4", "video/ogg"];
+    if (!supported.includes(mediaType)) {
+      setError("Choose a WebM, MP4, or Ogg video file.");
+      return;
+    }
+    if (file.size <= 0 || file.size > 200 * 1024 * 1024) {
+      setError("Choose a video file between 1 byte and 200 MB.");
+      return;
+    }
+    setError("");
+    setPendingRecording({
+      blob: file,
+      courseId,
+      title: title.trim(),
+      description: description.trim(),
+      position,
+      lessonId,
+      mediaType,
+    });
+    previewBlob(file);
+    setMessage("Video ready to preview and upload.");
   }
 
   async function publishDraft(videoId) {
@@ -328,7 +474,13 @@ export default function CourseVideoRecorder({ courses }) {
   function beginEditVideo(video) {
     setError("");
     setEditingVideoId(String(video.id));
-    setVideoEdit({ title: video.title, status: video.status });
+    setVideoEdit({
+      title: video.title,
+      description: video.description || "",
+      position: video.position || 1,
+      lesson_id: video.lesson_id || "",
+      status: video.status,
+    });
   }
 
   async function saveVideoChanges(videoId) {
@@ -396,7 +548,7 @@ export default function CourseVideoRecorder({ courses }) {
   }
 
   return (
-    <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section id="video-lessons" className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center gap-3">
         <div className="rounded-lg bg-cyan-100 p-2">
           <Video className="h-5 w-5 text-cyan-700" />
@@ -454,6 +606,7 @@ export default function CourseVideoRecorder({ courses }) {
                     aria-selected={String(course.id) === String(courseId)}
                     onClick={() => {
                       setCourseId(String(course.id));
+                      setLessonId("");
                       setCoursePickerOpen(false);
                     }}
                     className={`w-full px-3 py-2 text-left text-sm hover:bg-cyan-50 ${
@@ -480,8 +633,62 @@ export default function CourseVideoRecorder({ courses }) {
             placeholder="e.g. Week 3: Introduction"
             className="mb-3 w-full rounded-lg border border-slate-300 px-3 py-2"
           />
+          <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="video-lesson">
+            Attach to a course lesson (optional)
+          </label>
+          <select
+            id="video-lesson"
+            value={lessonId}
+            onChange={(event) => setLessonId(event.target.value)}
+            disabled={!courseId || recording || uploading || pendingRecording}
+            className="mb-3 w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+          >
+            <option value="">Course-level video</option>
+            {courseLessons.map((lesson) => (
+              <option key={lesson.id} value={lesson.id}>
+                {lesson.module_title}: {lesson.title}
+              </option>
+            ))}
+          </select>
+          <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="video-description">
+            Description
+          </label>
+          <textarea
+            id="video-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={4000}
+            rows={2}
+            disabled={recording || uploading || pendingRecording}
+            placeholder="Describe what students will learn in this recording."
+            className="mb-3 w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
+          <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="video-position">
+            Course video position (optional)
+          </label>
+          <input
+            id="video-position"
+            type="number"
+            min="1"
+            max="10000"
+            value={position}
+            onChange={(event) => setPosition(event.target.value)}
+            disabled={recording || uploading || pendingRecording}
+            className="mb-3 w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
+          <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="video-file">
+            Or upload a video file (WebM, MP4, or Ogg; up to 200 MB)
+          </label>
+          <input
+            id="video-file"
+            type="file"
+            accept="video/webm,video/mp4,video/ogg,.ogv"
+            onChange={chooseVideoFile}
+            disabled={!courseId || !title.trim() || recording || uploading || pendingRecording || cameraEnabled}
+            className="mb-3 block w-full rounded-lg border border-slate-300 p-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:font-semibold file:text-cyan-800 disabled:bg-slate-100"
+          />
           <div className="flex flex-wrap gap-2">
-            {!cameraEnabled ? (
+            {!cameraEnabled && !pendingRecording ? (
               <button
                 type="button"
                 onClick={startCamera}
@@ -557,7 +764,7 @@ export default function CourseVideoRecorder({ courses }) {
                     <button
                       type="button"
                       onClick={() => {
-                        setPendingRecording(null);
+                        clearPendingRecording();
                         elapsedBeforeSegmentRef.current = 0;
                         setRecordingElapsedMs(0);
                       }}
@@ -570,7 +777,17 @@ export default function CourseVideoRecorder({ courses }) {
                 )}
               </>
             )}
-            {uploading && <span className="self-center text-sm text-slate-600">Uploading recording…</span>}
+            {uploading && (
+              <div className="w-full" role="status" aria-live="polite">
+                <p className="text-sm text-slate-600">Uploading video… {uploadProgress}%</p>
+                <progress
+                  className="mt-1 w-full accent-cyan-700"
+                  max="100"
+                  value={uploadProgress}
+                  aria-label="Video upload progress"
+                />
+              </div>
+            )}
             {recording && (
               <span role="status" className="self-center text-sm font-medium text-red-700">
                 {finalizingRecording
@@ -602,6 +819,17 @@ export default function CourseVideoRecorder({ courses }) {
             playsInline
             className="mt-4 aspect-video w-full rounded-lg bg-slate-900"
           />
+          {pendingPreviewUrl && (
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-medium text-slate-700">Preview before upload</p>
+              <video
+                controls
+                playsInline
+                src={pendingPreviewUrl}
+                className="aspect-video w-full rounded-lg bg-slate-900"
+              />
+            </div>
+          )}
         </div>
 
         <div>
@@ -633,6 +861,61 @@ export default function CourseVideoRecorder({ courses }) {
                             }
                             className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
                           />
+                          <label className="sr-only" htmlFor={`video-edit-lesson-${video.id}`}>
+                            Associate with lesson
+                          </label>
+                          <select
+                            id={`video-edit-lesson-${video.id}`}
+                            value={videoEdit.lesson_id}
+                            onChange={(event) =>
+                              setVideoEdit((current) => ({
+                                ...current,
+                                lesson_id: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          >
+                            <option value="">Course-level video</option>
+                            {availableLessons
+                              .filter((lesson) => String(lesson.course_id) === String(video.course_id))
+                              .map((lesson) => (
+                                <option key={lesson.id} value={lesson.id}>
+                                  {lesson.module_title}: {lesson.title}
+                                </option>
+                              ))}
+                          </select>
+                          <label className="sr-only" htmlFor={`video-edit-description-${video.id}`}>
+                            Video description
+                          </label>
+                          <textarea
+                            id={`video-edit-description-${video.id}`}
+                            value={videoEdit.description}
+                            maxLength={4000}
+                            onChange={(event) =>
+                              setVideoEdit((current) => ({
+                                ...current,
+                                description: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          />
+                          <label className="sr-only" htmlFor={`video-edit-position-${video.id}`}>
+                            Video position
+                          </label>
+                          <input
+                            id={`video-edit-position-${video.id}`}
+                            type="number"
+                            min="1"
+                            max="10000"
+                            value={videoEdit.position}
+                            onChange={(event) =>
+                              setVideoEdit((current) => ({
+                                ...current,
+                                position: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          />
                           <label className="sr-only" htmlFor={`video-edit-status-${video.id}`}>
                             Video visibility
                           </label>
@@ -652,7 +935,13 @@ export default function CourseVideoRecorder({ courses }) {
                           </select>
                         </div>
                       ) : (
-                        <p className="font-medium text-slate-900">{video.title}</p>
+                        <>
+                          <p className="font-medium text-slate-900">{video.title}</p>
+                          {video.description && (
+                            <p className="mt-1 max-w-md text-xs text-slate-600">{video.description}</p>
+                          )}
+                          <p className="mt-1 text-xs text-slate-500">Position {video.position}</p>
+                        </>
                       )}
                       <p className="text-sm text-slate-600">{video.course_title}</p>
                       <p
@@ -662,6 +951,15 @@ export default function CourseVideoRecorder({ courses }) {
                       >
                         {video.status === "draft" ? "Draft — not sent" : "Sent to students"}
                       </p>
+                      {videoAnalytics[String(video.id)] && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {videoAnalytics[String(video.id)].started_students} started ·{" "}
+                          {videoAnalytics[String(video.id)].completed_students} completed
+                          {videoAnalytics[String(video.id)].average_watch_percentage !== null
+                            ? ` · ${videoAnalytics[String(video.id)].average_watch_percentage}% avg. viewed`
+                            : ""}
+                        </p>
+                      )}
                     </div>
                     <div className="flex shrink-0 flex-wrap justify-end gap-2">
                       {String(editingVideoId) === String(video.id) ? (

@@ -7,11 +7,13 @@ const {
   getOverview,
   getAdminOverview,
   getInstructorStudentPerformance,
+  getInstructorCalendar,
 } = require("../controllers/analyticsController");
 
 router.use(authenticate);
 
 router.get("/overview", getOverview);
+router.get("/calendar", getInstructorCalendar);
 router.get("/admin/overview", authorize("admin"), getAdminOverview);
 router.get("/students", getInstructorStudentPerformance);
 

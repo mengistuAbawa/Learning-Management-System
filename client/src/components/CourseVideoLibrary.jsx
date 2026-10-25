@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, RefreshCw, Video } from "lucide-react";
 import api from "../services/api";
 
@@ -8,6 +8,8 @@ export default function CourseVideoLibrary() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [progressError, setProgressError] = useState("");
+  const lastSavedAt = useRef({});
 
   const loadVideos = useCallback(async (showError = true) => {
     setRefreshing(true);
@@ -56,6 +58,47 @@ export default function CourseVideoLibrary() {
     }
   }
 
+  async function saveProgress(video, element, force = false) {
+    if (!element || !Number.isFinite(element.duration) || element.duration <= 0) return;
+    const position = Math.floor(element.currentTime);
+    if (
+      !force &&
+      position - (lastSavedAt.current[video.id] ?? 0) < 15
+    ) return;
+
+    lastSavedAt.current[video.id] = position;
+    try {
+      const response = await api.patch(`/course-videos/${video.id}/progress`, {
+        position_seconds: position,
+        duration_seconds: Math.floor(element.duration),
+      });
+      setVideos((current) =>
+        current.map((item) =>
+          item.id === video.id
+            ? { ...item, ...response.data.progress }
+            : item
+        )
+      );
+      setProgressError("");
+    } catch (saveError) {
+      setProgressError(
+        saveError.response?.data?.message ||
+          "Video progress could not be saved. Playback is still available."
+      );
+    }
+  }
+
+  function resumeVideo(video, element) {
+    const position = Number(video.last_position_seconds) || 0;
+    if (
+      position > 0 &&
+      Number.isFinite(element.duration) &&
+      position < element.duration - 2
+    ) {
+      element.currentTime = position;
+    }
+  }
+
   return (
     <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center gap-3">
@@ -79,6 +122,7 @@ export default function CourseVideoLibrary() {
         </button>
       </div>
       {error && <p role="alert" className="mb-3 text-sm text-red-700">{error}</p>}
+      {progressError && <p role="status" className="mb-3 text-sm text-amber-700">{progressError}</p>}
       {loading ? (
         <p className="text-sm text-slate-600">Loading course videos…</p>
       ) : videos.length === 0 ? (
@@ -93,9 +137,19 @@ export default function CourseVideoLibrary() {
                 <div>
                   <h3 className="font-semibold text-slate-900">{video.title}</h3>
                   <p className="text-sm text-slate-600">{video.course_title}</p>
+                  {video.description && (
+                    <p className="mt-1 text-sm text-slate-600">{video.description}</p>
+                  )}
                   <p className="text-xs text-slate-500">
                     Instructor: {video.instructor_name}
                   </p>
+                  {Number(video.duration_seconds) > 0 && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {video.completed
+                        ? "Completed"
+                        : `Resume at ${Math.floor(Number(video.last_position_seconds) / 60)}:${String(Math.floor(Number(video.last_position_seconds) % 60)).padStart(2, "0")}`}
+                    </p>
+                  )}
                 </div>
                 {!playing[video.id] && (
                   <button
@@ -113,6 +167,10 @@ export default function CourseVideoLibrary() {
                   playsInline
                   crossOrigin="anonymous"
                   src={playing[video.id]}
+                  onLoadedMetadata={(event) => resumeVideo(video, event.currentTarget)}
+                  onTimeUpdate={(event) => saveProgress(video, event.currentTarget)}
+                  onPause={(event) => saveProgress(video, event.currentTarget, true)}
+                  onEnded={(event) => saveProgress(video, event.currentTarget, true)}
                   onError={() =>
                     setError(
                       "The video could not load. Check that the recording is available and try again."

@@ -2,6 +2,7 @@ const express = require("express");
 const { param, validationResult } = require("express-validator");
 
 const { authenticate, authorize } = require("../middleware/auth");
+const { auditAdminAction } = require("../middleware/adminAudit");
 const courseController = require("../controllers/courseController");
 
 const router = express.Router();
@@ -31,6 +32,7 @@ const validateCourseId = [
 ];
 
 router.use(authenticate);
+router.use(auditAdminAction);
 
 // All authenticated users can view categories.
 router.get("/categories", courseController.getCategories);
@@ -38,6 +40,26 @@ router.post(
   "/categories",
   authorize("admin"),
   courseController.createCategory,
+);
+router.put(
+  "/categories/:name",
+  authorize("admin"),
+  param("name")
+    .isString()
+    .isLength({ min: 2, max: 100 })
+    .withMessage("Category name must contain between 2 and 100 characters."),
+  handleValidation,
+  courseController.updateCategory,
+);
+router.delete(
+  "/categories/:name",
+  authorize("admin"),
+  param("name")
+    .isString()
+    .isLength({ min: 2, max: 100 })
+    .withMessage("Category name must contain between 2 and 100 characters."),
+  handleValidation,
+  courseController.deleteCategory,
 );
 
 // All authenticated roles can browse, but the controller restricts

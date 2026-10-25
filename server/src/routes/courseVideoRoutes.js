@@ -57,6 +57,19 @@ const validateId = [
 ];
 
 router.get("/", authenticate, controller.list);
+router.get(
+  "/courses/:courseId/analytics",
+  authenticate,
+  authorize("instructor", "admin"),
+  param("courseId").isInt({ min: 1 }),
+  (req, res, next) => {
+    if (!validationResult(req).isEmpty()) {
+      return res.status(400).json({ success: false, message: "Invalid course ID." });
+    }
+    next();
+  },
+  controller.getCourseAnalytics
+);
 router.post(
   "/courses/:courseId",
   authenticate,
@@ -89,6 +102,8 @@ router.post(
   },
   controller.create
 );
+router.get("/:id/progress", authenticate, ...validateId, controller.getProgress);
+router.patch("/:id/progress", authenticate, ...validateId, controller.saveProgress);
 router.post("/:id/playback", authenticate, ...validateId, controller.createPlaybackLink);
 router.patch(
   "/:id/publish",

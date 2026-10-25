@@ -122,7 +122,7 @@ export default function LiveClasses() {
   async function startClass(liveClass) {
     setError("");
     try {
-      if (liveClass.status === "scheduled") {
+      if (liveClass.status === "scheduled" && user?.role !== "admin") {
         await api.post(`/live-classes/${liveClass.id}/start`);
       }
       navigate(`/live-classes/${liveClass.id}/room`);
@@ -342,7 +342,11 @@ export default function LiveClasses() {
                           onClick={() => startClass(liveClass)}
                           className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold hover:bg-indigo-500"
                         >
-                          {liveClass.status === "live" ? "Open class" : "Start class"}
+                          {user?.role === "admin"
+                            ? "Review class"
+                            : liveClass.status === "live"
+                              ? "Open class"
+                              : "Start class"}
                         </button>
                       )}
                     {!liveClass.can_manage && liveClass.status === "live" && (

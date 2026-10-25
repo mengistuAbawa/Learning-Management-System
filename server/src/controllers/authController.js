@@ -5,6 +5,15 @@ const { pool } = require("../config/db");
 
 const SALT_ROUNDS = 12;
 
+async function publicRegistrationEnabled() {
+  const result = await pool.query(
+    `SELECT setting_value
+     FROM platform_settings
+     WHERE setting_key = 'public_registration_enabled'`
+  );
+  return !result.rowCount || result.rows[0].setting_value !== false;
+}
+
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
 
@@ -45,6 +54,13 @@ function createToken(user) {
 
 async function register(req, res) {
   try {
+    if (!(await publicRegistrationEnabled())) {
+      return res.status(403).json({
+        success: false,
+        message: "Public student registration is currently closed.",
+      });
+    }
+
     const fullName = req.body.full_name.trim();
     const email = req.body.email.trim().toLowerCase();
     const password = req.body.password;
@@ -82,6 +98,47 @@ async function register(req, res) {
     return res.status(500).json({
       success: false,
       message: "Unable to complete registration.",
+    });
+  }
+}
+
+async function applyAsInstructor(req, res) {
+  try {
+    if (!(await publicRegistrationEnabled())) {
+      return res.status(403).json({
+        success: false,
+        message: "Public registration is currently closed.",
+      });
+    }
+
+    const fullName = req.body.full_name.trim();
+    const email = req.body.email.trim().toLowerCase();
+    const passwordHash = await bcrypt.hash(req.body.password, SALT_ROUNDS);
+    const result = await pool.query(
+      `INSERT INTO users
+         (full_name, email, password_hash, role, approval_status)
+       VALUES ($1, $2, $3, 'instructor', 'pending')
+       RETURNING id, full_name, email, role, avatar_url,
+                 bio, is_active, approval_status, created_at`,
+      [fullName, email, passwordHash]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Instructor application submitted for administrator review.",
+      user: publicUser(result.rows[0]),
+    });
+  } catch (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        message: "An account with this email already exists.",
+      });
+    }
+    console.error("Instructor application error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to submit the instructor application.",
     });
   }
 }
@@ -165,13 +222,16 @@ async function login(req, res) {
       });
     }
 
-    if (user.role === "student" && user.approval_status !== "approved") {
+    if (
+      ["student", "instructor"].includes(user.role) &&
+      user.approval_status !== "approved"
+    ) {
       return res.status(403).json({
         success: false,
         message:
           user.approval_status === "rejected"
-            ? "Your student registration was not approved. Contact an administrator."
-            : "Your student registration is awaiting administrator approval.",
+            ? `Your ${user.role} application was not approved. Contact an administrator.`
+            : `Your ${user.role} application is awaiting administrator approval.`,
       });
     }
 
@@ -202,6 +262,7 @@ async function me(req, res) {
 
 module.exports = {
   register,
+  applyAsInstructor,
   createInstructor,
   login,
   me,

@@ -9,7 +9,6 @@ import {
   TrendingUp,
   ShieldAlert,
   Bell,
-  Search,
   UserPlus,
   Pencil,
   Trash2,
@@ -17,18 +16,23 @@ import {
   UserX,
   Check,
   X,
-  Moon,
-  Sun,
+  Globe2,
+  Plug,
+  Settings,
+  Menu,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAdminAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
 import DashboardSidebar from "../components/DashboardSidebar";
+import DashboardThemeToggle from "../components/DashboardThemeToggle";
 
 export default function AdminDashboardEnhanced() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [analyticsError, setAnalyticsError] = useState("");
@@ -38,7 +42,24 @@ export default function AdminDashboardEnhanced() {
   );
   const [recentUsers, setRecentUsers] = useState([]);
   const [recentUsersError, setRecentUsersError] = useState("");
+  const [accountModalRole, setAccountModalRole] = useState("");
+  const [managedAccounts, setManagedAccounts] = useState([]);
+  const [managedAccountsLoading, setManagedAccountsLoading] = useState(false);
+  const [managedAccountsError, setManagedAccountsError] = useState("");
+  const [managedAccountsPagination, setManagedAccountsPagination] = useState({
+    offset: 0,
+    limit: 25,
+    total: 0,
+    has_more: false,
+  });
+  const [settingsDraft, setSettingsDraft] = useState({});
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSuccess, setSettingsSuccess] = useState("");
+  const [savingSetting, setSavingSetting] = useState("");
   const [pendingStudents, setPendingStudents] = useState([]);
+  const [pendingInstructorCount, setPendingInstructorCount] = useState(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [pendingStudentsError, setPendingStudentsError] = useState("");
   const [loadingPendingStudents, setLoadingPendingStudents] = useState(true);
   const [approvalActionError, setApprovalActionError] = useState("");
@@ -115,6 +136,15 @@ export default function AdminDashboardEnhanced() {
   }, [darkTheme]);
 
   useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    function closeOnEscape(event) {
+      if (event.key === "Escape") setMobileNavOpen(false);
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
     async function loadPendingStudents() {
       try {
         const response = await api.get("/users/students/pending");
@@ -132,6 +162,127 @@ export default function AdminDashboardEnhanced() {
 
     loadPendingStudents();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      api.get("/users/instructors/pending"),
+      api.get("/notifications/unread-count"),
+    ])
+      .then(([instructorsResponse, notificationsResponse]) => {
+        if (!active) return;
+        setPendingInstructorCount(instructorsResponse.data.instructors?.length || 0);
+        setUnreadNotificationCount(notificationsResponse.data.unread_count || 0);
+      })
+      .catch(() => {
+        if (active) {
+          setPendingInstructorCount(0);
+          setUnreadNotificationCount(0);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    async function loadPlatformSettings() {
+      try {
+        const response = await api.get("/admin/settings");
+        const settings = response.data.settings || {};
+        setSettingsDraft({
+          platform_name: settings.platform_name?.value ?? "LearnSphere LMS",
+          support_email: settings.support_email?.value ?? "",
+          public_registration_enabled:
+            settings.public_registration_enabled?.value ?? true,
+          platform_language: settings.platform_language?.value ?? "en",
+          platform_timezone:
+            settings.platform_timezone?.value ??
+            Intl.DateTimeFormat().resolvedOptions().timeZone ??
+            "UTC",
+        });
+        setSettingsError("");
+      } catch (requestError) {
+        setSettingsError(
+          requestError.response?.data?.message || "Unable to load platform settings."
+        );
+      } finally {
+        setSettingsLoading(false);
+      }
+    }
+
+    loadPlatformSettings();
+  }, []);
+
+  useEffect(() => {
+    if (!accountModalRole) return undefined;
+    const controller = new AbortController();
+
+    async function loadManagedAccounts() {
+      try {
+        setManagedAccountsLoading(true);
+        setManagedAccountsError("");
+        const response = await api.get("/users/accounts", {
+          params: {
+            role: accountModalRole,
+            limit: managedAccountsPagination.limit,
+            offset: managedAccountsPagination.offset,
+          },
+          signal: controller.signal,
+        });
+        setManagedAccounts(response.data.users || []);
+        setManagedAccountsPagination(response.data.pagination);
+      } catch (requestError) {
+        if (requestError.name !== "CanceledError") {
+          setManagedAccountsError(
+            requestError.response?.data?.message ||
+              `Unable to load ${accountModalRole} accounts.`
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setManagedAccountsLoading(false);
+      }
+    }
+
+    loadManagedAccounts();
+    return () => controller.abort();
+  }, [
+    accountModalRole,
+    managedAccountsPagination.limit,
+    managedAccountsPagination.offset,
+  ]);
+
+  function updateAccountLists(update) {
+    setRecentUsers(update);
+    setManagedAccounts(update);
+  }
+
+  function openSidebarAction(action) {
+    setManagedAccountsError("");
+    setManagedAccounts([]);
+    setEditingUserId(null);
+    setUserActionError("");
+    setApprovalActionError("");
+    setManagedAccountsPagination((current) => ({ ...current, offset: 0 }));
+    setAccountModalRole(action);
+  }
+
+  async function savePlatformSetting(key, value) {
+    setSavingSetting(key);
+    setSettingsError("");
+    setSettingsSuccess("");
+    try {
+      await api.put(`/admin/settings/${key}`, { value });
+      setSettingsDraft((current) => ({ ...current, [key]: value }));
+      setSettingsSuccess("Settings saved.");
+    } catch (requestError) {
+      setSettingsError(
+        requestError.response?.data?.message || "Unable to save this setting."
+      );
+    } finally {
+      setSavingSetting("");
+    }
+  }
 
   function handleLogout() {
     logout();
@@ -166,7 +317,7 @@ export default function AdminDashboardEnhanced() {
     setUserActionError("");
     try {
       const response = await api.patch(`/users/${accountId}`, editUserForm);
-      setRecentUsers((accounts) =>
+      updateAccountLists((accounts) =>
         accounts.map((account) =>
           String(account.id) === String(accountId)
             ? response.data.user
@@ -190,7 +341,7 @@ export default function AdminDashboardEnhanced() {
       const response = await api.patch(`/users/${account.id}/status`, {
         is_active: !account.is_active,
       });
-      setRecentUsers((accounts) =>
+      updateAccountLists((accounts) =>
         accounts.map((item) =>
           String(item.id) === String(account.id) ? response.data.user : item
         )
@@ -242,7 +393,7 @@ export default function AdminDashboardEnhanced() {
           },
         };
       });
-      setRecentUsers((accounts) =>
+      updateAccountLists((accounts) =>
         accounts.map((account) =>
           String(account.id) === String(student.id)
             ? response.data.user
@@ -253,6 +404,39 @@ export default function AdminDashboardEnhanced() {
       setApprovalActionError(
         requestError.response?.data?.message ||
           `Unable to ${approvalStatus} this student registration.`
+      );
+    } finally {
+      setSavingUserId(null);
+    }
+  }
+
+  async function reviewInstructorApplication(instructor, approvalStatus) {
+    if (
+      approvalStatus === "rejected" &&
+      !window.confirm(`Reject ${instructor.full_name}'s instructor application?`)
+    ) {
+      return;
+    }
+
+    setSavingUserId(String(instructor.id));
+    setUserActionError("");
+    try {
+      const response = await api.patch(
+        `/users/instructors/${instructor.id}/approval`,
+        { approval_status: approvalStatus }
+      );
+      updateAccountLists((accounts) =>
+        accounts.map((account) =>
+          String(account.id) === String(instructor.id)
+            ? response.data.user
+            : account
+        )
+      );
+      setPendingInstructorCount((count) => Math.max(0, count - 1));
+    } catch (requestError) {
+      setUserActionError(
+        requestError.response?.data?.message ||
+          `Unable to ${approvalStatus} this instructor application.`
       );
     } finally {
       setSavingUserId(null);
@@ -272,9 +456,13 @@ export default function AdminDashboardEnhanced() {
     setUserActionError("");
     try {
       await api.delete(`/users/${account.id}`);
-      setRecentUsers((accounts) =>
+      updateAccountLists((accounts) =>
         accounts.filter((item) => String(item.id) !== String(account.id))
       );
+      setManagedAccountsPagination((current) => ({
+        ...current,
+        total: Math.max(0, current.total - 1),
+      }));
     } catch (requestError) {
       setUserActionError(
         requestError.response?.data?.message || "Unable to delete this account."
@@ -423,23 +611,22 @@ export default function AdminDashboardEnhanced() {
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 lg:hidden"
+            aria-label="Open administrator navigation"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
           <Link to="/admin-dashboard" className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-600 to-amber-700">
               <ShieldAlert className="h-5 w-5 text-white" />
             </div>
-            <span className="text-lg font-bold text-slate-900">LMS Admin</span>
+            <span className="text-lg font-bold text-slate-900">
+              {settingsDraft.platform_name || "LearnSphere LMS"}
+            </span>
           </Link>
-
-          <div className="flex-1 max-w-md hidden sm:flex">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm placeholder-slate-500 focus:border-amber-500 focus:bg-white focus:outline-none"
-              />
-            </div>
-          </div>
 
           <div className="flex items-center gap-4">
             <Link
@@ -480,23 +667,27 @@ export default function AdminDashboardEnhanced() {
               <span className="hidden sm:inline">Add Instructor</span>
               <span className="sm:hidden">Add</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setDarkTheme((current) => !current)}
-              aria-label={`Switch to ${darkTheme ? "light" : "dark"} theme`}
-              aria-pressed={darkTheme}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            <Link
+              to="/notifications"
+              aria-label={`${unreadNotificationCount} unread notifications`}
+              className="relative rounded-lg p-2 hover:bg-slate-100"
             >
-              {darkTheme ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              <span className="hidden md:inline">
-                {darkTheme ? "Light theme" : "Dark theme"}
-              </span>
-            </button>
-            <button className="rounded-lg hover:bg-slate-100 p-2">
               <Bell className="h-5 w-5 text-slate-600" />
-            </button>
+              {unreadNotificationCount > 0 ? (
+                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500" />
+              ) : null}
+            </Link>
 
-            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-gradient-to-br from-amber-400 to-amber-600">
+            <DashboardThemeToggle
+              darkTheme={darkTheme}
+              onToggle={() => setDarkTheme((current) => !current)}
+            />
+
+            <Link
+              to="/admin/settings"
+              aria-label="Administrator profile and settings"
+              className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-gradient-to-br from-amber-400 to-amber-600"
+            >
               {user?.avatar_url ? (
                 <img
                   src={user.avatar_url}
@@ -506,7 +697,7 @@ export default function AdminDashboardEnhanced() {
               ) : (
                 <UserRound className="h-5 w-5 text-white" />
               )}
-            </div>
+            </Link>
 
             <button
               type="button"
@@ -521,7 +712,19 @@ export default function AdminDashboardEnhanced() {
       </header>
 
       <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-start lg:px-6">
-        <DashboardSidebar role="admin" />
+        <DashboardSidebar
+          role="admin"
+          responsive
+          mobileOpen={mobileNavOpen}
+          collapsed={sidebarCollapsed}
+          onClose={() => setMobileNavOpen(false)}
+          onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+          onAction={openSidebarAction}
+          counts={{
+            pendingApprovals: pendingInstructorCount + pendingStudents.length,
+            unreadNotifications: unreadNotificationCount,
+          }}
+        />
         <main className="min-w-0 flex-1 py-2">
         {/* Error Alert */}
         {error && (
@@ -538,13 +741,14 @@ export default function AdminDashboardEnhanced() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
           <p className="mt-1 text-slate-600">
-            Welcome to the LMS Administration Panel
+            Welcome, {user?.full_name || "Administrator"}.
           </p>
         </div>
 
         <section
+          id="platform-analytics"
           aria-labelledby="platform-analytics-heading"
-          className="mb-8 space-y-5"
+          className="mb-8 scroll-mt-24 space-y-5"
         >
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -575,7 +779,7 @@ export default function AdminDashboardEnhanced() {
             </p>
           ) : summary ? (
             <>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {[
                   {
                     label: "Total users",
@@ -592,6 +796,13 @@ export default function AdminDashboardEnhanced() {
                     color: "bg-cyan-100 text-cyan-700",
                   },
                   {
+                    label: "Instructors",
+                    value: summary.total_instructors,
+                    detail: `${pendingInstructorCount} pending approval`,
+                    icon: UserCheck,
+                    color: "bg-violet-100 text-violet-700",
+                  },
+                  {
                     label: "Courses",
                     value: summary.total_courses,
                     detail: `${summary.published_courses} published`,
@@ -599,11 +810,18 @@ export default function AdminDashboardEnhanced() {
                     color: "bg-emerald-100 text-emerald-700",
                   },
                   {
-                    label: "Enrollments",
+                    label: "Enrollment records",
                     value: summary.total_enrollments,
-                    detail: `${summary.completed_enrollments} completed`,
+                    detail: `${summary.completed_enrollments} completed · not unique learners`,
                     icon: TrendingUp,
                     color: "bg-amber-100 text-amber-700",
+                  },
+                  {
+                    label: "Course completion rate",
+                    value: `${Number(summary.course_completion_rate || 0).toFixed(1)}%`,
+                    detail: "Completed / active and completed enrollments",
+                    icon: UserCheck,
+                    color: "bg-emerald-100 text-emerald-700",
                   },
                 ].map(({ label, value, detail, icon: Icon, color }) => (
                   <article
@@ -730,7 +948,7 @@ export default function AdminDashboardEnhanced() {
 
         <section
           id="student-accounts"
-          className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          className="mb-8 scroll-mt-24 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
         >
           <h2 className="font-semibold text-slate-900">Student accounts</h2>
           <p className="mt-1 text-sm text-slate-600">
@@ -836,7 +1054,10 @@ export default function AdminDashboardEnhanced() {
           )}
         </section>
 
-        <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section
+          id="instructor-accounts"
+          className="mb-8 scroll-mt-24 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
           <h2 className="font-semibold text-slate-900">Instructor accounts</h2>
           <p className="mt-1 text-sm text-slate-600">
             Create an instructor account and provide the credentials to its owner.
@@ -941,7 +1162,10 @@ export default function AdminDashboardEnhanced() {
           )}
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section
+          id="pending-approvals"
+          className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
           <div className="mb-5 flex items-center justify-between gap-3">
             <h2 className="font-bold text-slate-900">Pending Student Registrations</h2>
             <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
@@ -1014,7 +1238,7 @@ export default function AdminDashboardEnhanced() {
           {/* Recently Added Users */}
           <div
             id="recent-users"
-            className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+            className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
           >
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-bold text-slate-900">Recently Added Users</h2>
@@ -1247,11 +1471,505 @@ export default function AdminDashboardEnhanced() {
           </div>
         </div>
 
+        <section
+          id="general-settings"
+          className="mt-8 scroll-mt-24 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <Settings className="h-5 w-5 text-indigo-600" aria-hidden="true" />
+            <div>
+              <h2 className="font-bold text-slate-900">General settings</h2>
+              <p className="text-sm text-slate-500">
+                Manage the platform name, support contact, and registration access.
+              </p>
+            </div>
+          </div>
+          {settingsLoading ? (
+            <p className="mt-5 text-sm text-slate-500">Loading platform settings...</p>
+          ) : (
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <label className="text-sm font-medium text-slate-700">
+                Platform name
+                <input
+                  value={settingsDraft.platform_name ?? "LearnSphere LMS"}
+                  onChange={(event) =>
+                    setSettingsDraft((current) => ({
+                      ...current,
+                      platform_name: event.target.value,
+                    }))
+                  }
+                  maxLength={100}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5"
+                />
+                <button
+                  type="button"
+                  disabled={savingSetting === "platform_name"}
+                  onClick={() =>
+                    savePlatformSetting("platform_name", settingsDraft.platform_name)
+                  }
+                  className="mt-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  {savingSetting === "platform_name" ? "Saving..." : "Save name"}
+                </button>
+              </label>
+
+              <label className="text-sm font-medium text-slate-700">
+                Support email
+                <input
+                  type="email"
+                  value={settingsDraft.support_email ?? ""}
+                  onChange={(event) =>
+                    setSettingsDraft((current) => ({
+                      ...current,
+                      support_email: event.target.value,
+                    }))
+                  }
+                  maxLength={255}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5"
+                />
+                <button
+                  type="button"
+                  disabled={savingSetting === "support_email"}
+                  onClick={() =>
+                    savePlatformSetting(
+                      "support_email",
+                      settingsDraft.support_email?.trim() || null
+                    )
+                  }
+                  className="mt-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  {savingSetting === "support_email" ? "Saving..." : "Save email"}
+                </button>
+              </label>
+
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-4 sm:col-span-2">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    Public account registration
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Controls public student sign-up and instructor applications.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(settingsDraft.public_registration_enabled)}
+                  disabled={savingSetting === "public_registration_enabled"}
+                  onClick={() =>
+                    savePlatformSetting(
+                      "public_registration_enabled",
+                      !settingsDraft.public_registration_enabled
+                    )
+                  }
+                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                    settingsDraft.public_registration_enabled
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-200 text-slate-700"
+                  } disabled:opacity-50`}
+                >
+                  {savingSetting === "public_registration_enabled"
+                    ? "Saving..."
+                    : settingsDraft.public_registration_enabled
+                      ? "Enabled"
+                      : "Disabled"}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section
+          id="localization"
+          className="mt-6 scroll-mt-24 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <Globe2 className="h-5 w-5 text-indigo-600" aria-hidden="true" />
+            <div>
+              <h2 className="font-bold text-slate-900">Localization</h2>
+              <p className="text-sm text-slate-500">
+                Set the platform’s default language and time zone.
+              </p>
+            </div>
+          </div>
+          {!settingsLoading && (
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <label className="text-sm font-medium text-slate-700">
+                Default language
+                <select
+                  value={settingsDraft.platform_language ?? "en"}
+                  onChange={(event) =>
+                    setSettingsDraft((current) => ({
+                      ...current,
+                      platform_language: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5"
+                >
+                  <option value="en">English</option>
+                  <option value="am">Amharic</option>
+                  <option value="es">Spanish</option>
+                  <option value="fr">French</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={savingSetting === "platform_language"}
+                  onClick={() =>
+                    savePlatformSetting(
+                      "platform_language",
+                      settingsDraft.platform_language
+                    )
+                  }
+                  className="mt-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  {savingSetting === "platform_language"
+                    ? "Saving..."
+                    : "Save language"}
+                </button>
+              </label>
+
+              <label className="text-sm font-medium text-slate-700">
+                Default time zone
+                <input
+                  value={settingsDraft.platform_timezone ?? "UTC"}
+                  onChange={(event) =>
+                    setSettingsDraft((current) => ({
+                      ...current,
+                      platform_timezone: event.target.value,
+                    }))
+                  }
+                  maxLength={100}
+                  placeholder="Africa/Addis_Ababa"
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5"
+                />
+                <button
+                  type="button"
+                  disabled={savingSetting === "platform_timezone"}
+                  onClick={() =>
+                    savePlatformSetting(
+                      "platform_timezone",
+                      settingsDraft.platform_timezone?.trim()
+                    )
+                  }
+                  className="mt-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  {savingSetting === "platform_timezone"
+                    ? "Saving..."
+                    : "Save time zone"}
+                </button>
+              </label>
+            </div>
+          )}
+        </section>
+
+        <section
+          id="integrations"
+          className="mt-6 scroll-mt-24 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <Plug className="h-5 w-5 text-indigo-600" aria-hidden="true" />
+            <div>
+              <h2 className="font-bold text-slate-900">Integrations</h2>
+              <p className="text-sm text-slate-500">
+                External service connections for this platform.
+              </p>
+            </div>
+          </div>
+          <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+            No configurable integrations are currently registered. Integration
+            credentials are not stored in platform settings.
+          </p>
+        </section>
+
+        {(settingsError || settingsSuccess) && (
+          <p
+            role={settingsError ? "alert" : "status"}
+            className={`mt-4 rounded-lg p-3 text-sm ${
+              settingsError
+                ? "bg-rose-50 text-rose-700"
+                : "bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {settingsError || settingsSuccess}
+          </p>
+        )}
+
+        {accountModalRole && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setAccountModalRole("");
+                setEditingUserId(null);
+              }
+            }}
+          >
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="managed-accounts-title"
+              className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+                <div>
+                  <h2
+                    id="managed-accounts-title"
+                    className="text-xl font-bold capitalize text-slate-900"
+                  >
+                    {accountModalRole} accounts
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    View account details, review applications, and manage access.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountModalRole("");
+                    setEditingUserId(null);
+                  }}
+                  aria-label="Close account list"
+                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                >
+                  <X className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
+
+              {(userActionError || approvalActionError) && (
+                <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+                  {userActionError || approvalActionError}
+                </p>
+              )}
+
+              {managedAccountsError ? (
+                <p role="alert" className="mt-5 text-sm text-rose-700">
+                  {managedAccountsError}
+                </p>
+              ) : managedAccountsLoading ? (
+                <div className="flex items-center gap-3 py-10 text-sm text-slate-500">
+                  <Loader className="h-5 w-5 animate-spin" aria-hidden="true" />
+                  Loading accounts...
+                </div>
+              ) : managedAccounts.length === 0 ? (
+                <p className="py-10 text-center text-sm text-slate-500">
+                  No {accountModalRole} accounts found.
+                </p>
+              ) : (
+                <div className="mt-4 divide-y divide-slate-100">
+                  {managedAccounts.map((account) => {
+                    const isEditing = editingUserId === String(account.id);
+                    const isBusy = savingUserId === String(account.id);
+                    const reviewPending = account.approval_status === "pending";
+
+                    return (
+                      <article
+                        key={account.id}
+                        className="py-5"
+                      >
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0 flex-1">
+                            {isEditing ? (
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <label className="text-xs font-medium text-slate-600">
+                                  Full name
+                                  <input
+                                    value={editUserForm.full_name}
+                                    onChange={(event) =>
+                                      setEditUserForm((current) => ({
+                                        ...current,
+                                        full_name: event.target.value,
+                                      }))
+                                    }
+                                    maxLength={150}
+                                    required
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                  />
+                                </label>
+                                <label className="text-xs font-medium text-slate-600">
+                                  Email
+                                  <input
+                                    type="email"
+                                    value={editUserForm.email}
+                                    onChange={(event) =>
+                                      setEditUserForm((current) => ({
+                                        ...current,
+                                        email: event.target.value,
+                                      }))
+                                    }
+                                    maxLength={255}
+                                    required
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                  />
+                                </label>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="font-semibold text-slate-900">
+                                  {account.full_name}
+                                </p>
+                                <p className="text-sm text-slate-600">{account.email}</p>
+                                <p className="mt-2 text-xs capitalize text-slate-500">
+                                  {account.role} · {account.is_active ? "Active" : "Suspended"} ·{" "}
+                                  Approval: {account.approval_status}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Joined {new Date(account.created_at).toLocaleDateString()}
+                                </p>
+                                {account.bio && (
+                                  <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm text-slate-600">
+                                    {account.bio}
+                                  </p>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => saveUser(account.id)}
+                                  aria-label="Save user changes"
+                                  className="rounded-lg bg-indigo-600 p-2 text-white hover:bg-indigo-500 disabled:opacity-50"
+                                >
+                                  {isBusy ? (
+                                    <Loader className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Check className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => setEditingUserId(null)}
+                                  aria-label="Cancel editing user"
+                                  className="rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-50"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {reviewPending && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={Boolean(savingUserId)}
+                                      onClick={() =>
+                                        accountModalRole === "student"
+                                          ? reviewStudentRegistration(account, "approved")
+                                          : reviewInstructorApplication(account, "approved")
+                                      }
+                                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                                    >
+                                      Approve
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={Boolean(savingUserId)}
+                                      onClick={() =>
+                                        accountModalRole === "student"
+                                          ? reviewStudentRegistration(account, "rejected")
+                                          : reviewInstructorApplication(account, "rejected")
+                                      }
+                                      className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                                    >
+                                      Reject
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={Boolean(savingUserId)}
+                                  onClick={() => beginEditUser(account)}
+                                  aria-label={`Edit ${account.full_name}`}
+                                  title="Edit account"
+                                  className="rounded-lg border border-slate-200 p-2 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={Boolean(savingUserId)}
+                                  onClick={() => toggleUserStatus(account)}
+                                  aria-label={`${account.is_active ? "Suspend" : "Reactivate"} ${account.full_name}`}
+                                  title={account.is_active ? "Suspend account" : "Reactivate account"}
+                                  className={`rounded-lg p-2 disabled:opacity-50 ${
+                                    account.is_active
+                                      ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                      : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                  }`}
+                                >
+                                  {account.is_active ? (
+                                    <UserX className="h-4 w-4" />
+                                  ) : (
+                                    <UserCheck className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={Boolean(savingUserId)}
+                                  onClick={() => deleteUser(account)}
+                                  aria-label={`Delete ${account.full_name}`}
+                                  title="Delete account"
+                                  className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4 text-sm">
+                <span className="text-slate-500">
+                  {managedAccountsPagination.total.toLocaleString()} total accounts
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={managedAccountsPagination.offset === 0 || managedAccountsLoading}
+                    onClick={() =>
+                      setManagedAccountsPagination((current) => ({
+                        ...current,
+                        offset: Math.max(0, current.offset - current.limit),
+                      }))
+                    }
+                    className="rounded-lg border border-slate-300 px-3 py-2 font-medium text-slate-700 disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!managedAccountsPagination.has_more || managedAccountsLoading}
+                    onClick={() =>
+                      setManagedAccountsPagination((current) => ({
+                        ...current,
+                        offset: current.offset + current.limit,
+                      }))
+                    }
+                    className="rounded-lg border border-slate-300 px-3 py-2 font-medium text-slate-700 disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+
         {/* Footer */}
         <footer className="mt-12 border-t border-slate-200 pt-6 text-center text-sm text-slate-500">
           <p>
-            © {new Date().getFullYear()} LMS Administration Portal. All rights
-            reserved.
+            © {new Date().getFullYear()} {settingsDraft.platform_name || "LearnSphere LMS"}.
+            All rights reserved.
           </p>
         </footer>
         </main>
