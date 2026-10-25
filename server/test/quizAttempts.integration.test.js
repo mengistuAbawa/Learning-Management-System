@@ -340,6 +340,29 @@ test("assessment attempts persist answers, enforce ownership, and support manual
   assert.equal(pendingResult.status, 202);
   assert.equal(pendingResult.body.released, false);
 
+  const attemptHistory = await request("/quiz-attempts/mine", {
+    token: studentToken,
+  });
+  const pendingHistoryItem = attemptHistory.body.attempts.find(
+    (item) => String(item.attempt_id) === String(attemptId)
+  );
+  assert.equal(attemptHistory.status, 200);
+  assert.equal(pendingHistoryItem.score, null);
+  assert.equal(pendingHistoryItem.total_points, null);
+  assert.equal(pendingHistoryItem.passed, null);
+
+  const studentAnalytics = await request("/analytics/overview", {
+    token: studentToken,
+  });
+  const pendingAnalyticsItem = studentAnalytics.body.analytics.quizAnalytics.recentAttempts.find(
+    (item) => String(item.attempt_id) === String(attemptId)
+  );
+  assert.equal(studentAnalytics.status, 200);
+  assert.equal(pendingAnalyticsItem.raw_score, null);
+  assert.equal(pendingAnalyticsItem.total_points, null);
+  assert.equal(pendingAnalyticsItem.score_percentage, null);
+  assert.equal(pendingAnalyticsItem.passed, null);
+
   const pendingAsWrongInstructor = await request("/instructor/quizzes/grading", {
     token: otherInstructorToken,
   });

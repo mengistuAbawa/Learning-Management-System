@@ -68,7 +68,10 @@ async function listQuizzes(req, res, next) {
        FROM quizzes q
        LEFT JOIN quiz_questions qq ON qq.quiz_id = q.id
        WHERE q.course_id = $1
-         AND ($2::boolean = TRUE OR q.is_published = TRUE)
+         AND (
+           $2::boolean = TRUE OR
+           (q.is_published = TRUE AND q.archived_at IS NULL)
+         )
        GROUP BY q.id
        ORDER BY q.created_at DESC`,
       [courseId, manager]
@@ -323,7 +326,10 @@ async function getQuiz(req, res, next) {
       ? await isEnrolled(req.user.id, access.quiz.course_id)
       : false;
 
-    if (!manager && (!enrolled || !access.quiz.is_published)) {
+    if (
+      !manager &&
+      (!enrolled || !access.quiz.is_published || access.quiz.archived_at)
+    ) {
       return fail(res, 403, "This quiz is not available to you.");
     }
     const now = Date.now();
@@ -1274,18 +1280,23 @@ async function getMyAttempts(req, res, next) {
       `SELECT a.id AS attempt_id, a.quiz_id, q.title AS quiz_title,
               a.attempt_number, a.started_at, a.submitted_at,
               a.grading_status,
-              CASE WHEN q.show_results_immediately OR a.grading_status = 'graded'
+              CASE WHEN a.grading_status <> 'pending_manual'
+                    AND (q.show_results_immediately OR a.grading_status = 'graded')
                 THEN a.score ELSE NULL END AS score,
-              CASE WHEN q.show_results_immediately OR a.grading_status = 'graded'
+              CASE WHEN a.grading_status <> 'pending_manual'
+                    AND (q.show_results_immediately OR a.grading_status = 'graded')
                 THEN a.total_points ELSE NULL END AS total_points,
-              CASE WHEN q.show_results_immediately OR a.grading_status = 'graded'
+              CASE WHEN a.grading_status <> 'pending_manual'
+                    AND (q.show_results_immediately OR a.grading_status = 'graded')
                 THEN a.passed ELSE NULL END AS passed,
               a.status,
-              CASE WHEN (q.show_results_immediately OR a.grading_status = 'graded')
+              CASE WHEN a.grading_status <> 'pending_manual'
+                    AND (q.show_results_immediately OR a.grading_status = 'graded')
                     AND a.total_points > 0
                 THEN ROUND(100.0 * a.score / a.total_points, 2)
                 ELSE NULL END AS percentage,
-              CASE WHEN q.show_results_immediately OR a.grading_status = 'graded'
+              CASE WHEN a.grading_status <> 'pending_manual'
+                    AND (q.show_results_immediately OR a.grading_status = 'graded')
                 THEN a.instructor_feedback ELSE NULL END AS instructor_feedback
        FROM quiz_attempts a
        JOIN quizzes q ON q.id = a.quiz_id

@@ -3,10 +3,13 @@ import {
   Bell,
   BookOpen,
   CalendarDays,
+  CheckCircle2,
   ClipboardCheck,
   Video,
   FileText,
   LayoutDashboard,
+  LogOut,
+  PlayCircle,
   Settings,
   ShieldCheck,
   UserCheck,
@@ -15,7 +18,7 @@ import {
   Tags,
   GraduationCap,
 } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useState } from "react";
 
 const dashboardNavigation = {
@@ -23,14 +26,50 @@ const dashboardNavigation = {
     title: "Student workspace",
     sections: [
       {
-        heading: "Learning",
+        heading: "Overview",
         items: [
           { label: "Dashboard", to: "/student-dashboard", icon: LayoutDashboard },
-          { label: "Courses", to: "/courses", icon: BookOpen },
-          { label: "My learning", to: "/my-learning", icon: Activity },
-          { label: "Live classes", to: "/live-classes", icon: CalendarDays },
-          { label: "Notifications", to: "/notifications", icon: Bell },
-          { label: "Analytics", to: "/analytics", icon: ChartNoAxesCombined },
+        ],
+      },
+      {
+        heading: "Learning",
+        items: [
+          { label: "Browse courses", to: "/courses", icon: BookOpen },
+          { label: "My courses", to: "/my-learning", icon: Activity },
+          { label: "Continue learning", to: "/my-learning", icon: PlayCircle },
+          { label: "Course materials", to: "/my-learning", icon: FileText },
+          { label: "Video lessons", to: "/student-dashboard#videos", icon: Video },
+          { label: "Learning progress", to: "/analytics", icon: ChartNoAxesCombined },
+        ],
+      },
+      {
+        heading: "Assessments",
+        items: [
+          { label: "Available quizzes", to: "/my-assessments#quizzes", icon: GraduationCap },
+          { label: "My quiz attempts", to: "/my-assessments#attempts", icon: ClipboardCheck },
+          { label: "Assignments", to: "/my-assessments#assignments", icon: FileText },
+          { label: "My submissions", to: "/my-assessments#submissions", icon: ClipboardCheck },
+          { label: "Grades and feedback", to: "/my-assessments#grades", icon: CheckCircle2 },
+        ],
+      },
+      {
+        heading: "Schedule",
+        items: [
+          { label: "Learning calendar", to: "/live-classes", icon: CalendarDays },
+          { label: "Upcoming live classes", to: "/live-classes", icon: Video },
+          { label: "Upcoming deadlines", to: "/my-assessments#assignments", icon: CalendarDays },
+        ],
+      },
+      {
+        heading: "Communication",
+        items: [
+          { label: "Notifications", to: "/notifications", icon: Bell, badge: "notifications" },
+        ],
+      },
+      {
+        heading: "Account",
+        items: [
+          { label: "Log out", action: "logout", icon: LogOut },
         ],
       },
     ],
@@ -139,6 +178,7 @@ export default function DashboardSidebar({
   counts = {},
 }) {
   const [expandedSections, setExpandedSections] = useState({});
+  const location = useLocation();
   const navigation = dashboardNavigation[role];
   if (!navigation) return null;
 
@@ -230,13 +270,22 @@ export default function DashboardSidebar({
                             onClick={onClose}
                             title={collapsed && responsive ? item.label : undefined}
                             aria-label={collapsed && responsive ? item.label : undefined}
-                            className={({ isActive }) =>
-                              `relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
-                                isActive
+                            className={({ isActive }) => {
+                              const [itemPath, itemHash] = item.to.split("#");
+                              const isCurrentAnchor = itemHash &&
+                                location.pathname === itemPath &&
+                                (location.hash
+                                  ? location.hash === `#${itemHash}`
+                                  : itemHash === "quizzes");
+                              const isCurrentRoute = isActive &&
+                                !itemHash &&
+                                !location.hash;
+                              return `relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
+                                isCurrentAnchor || isCurrentRoute
                                   ? "bg-indigo-50 text-indigo-700 shadow-sm"
                                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
                               } ${collapsed && responsive ? "lg:justify-center lg:px-2" : ""}`
-                            }
+                            }}
                           >
                             <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                             <span className={`${collapsed && responsive ? "lg:hidden" : ""} min-w-0 flex-1`}>{item.label}</span>

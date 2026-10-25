@@ -13,6 +13,7 @@ import CourseContent from "./pages/CourseContent";
 import CourseDetail from "./pages/CourseDetail";
 import CategoryPage from "./pages/CategoryPage";
 import MyLearning from "./pages/MyLearning";
+import StudentAssessments from "./pages/StudentAssessments";
 import CourseEnrollments from "./pages/CourseEnrollments";
 import QuizTake from "./pages/QuizTake";
 import QuizManagement from "./pages/QuizManagement";
@@ -130,6 +131,14 @@ export default function App() {
         <Route path="/courses/:courseId/learn" element={<CourseContent />} />
 
         <Route path="/my-learning" element={<MyLearning />} />
+        <Route
+          path="/my-assessments"
+          element={
+            <RoleRoute allowedRoles={["student"]}>
+              <StudentAssessments />
+            </RoleRoute>
+          }
+        />
 
         <Route
           path="/courses/:courseId/enrollments"

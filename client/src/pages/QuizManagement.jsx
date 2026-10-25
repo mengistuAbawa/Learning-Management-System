@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { BookOpen, Loader2, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, BookOpen, Loader2, Plus, RefreshCw } from "lucide-react";
 import {
   addQuestion,
   createQuiz,
@@ -179,8 +179,9 @@ export default function QuizManagement() {
 
           <Link
             to={`/courses/${courseId}/learn`}
-            className="rounded-xl border border-slate-700 px-4 py-3 hover:bg-slate-800"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-3 hover:bg-slate-800"
           >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to course
           </Link>
         </header>

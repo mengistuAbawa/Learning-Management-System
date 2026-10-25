@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import DashboardSidebar from "../components/DashboardSidebar";
 import api from "../services/api";
 
@@ -102,8 +102,9 @@ export default function QuizGrading() {
             </div>
             <Link
               to="/instructor-dashboard"
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back to dashboard
             </Link>
           </header>

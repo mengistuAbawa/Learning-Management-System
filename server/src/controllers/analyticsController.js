@@ -68,6 +68,8 @@ async function getStudentAnalytics(userId) {
         a.*,
         q.course_id,
         CASE WHEN a.total_points > 0
+          AND a.grading_status <> 'pending_manual'
+          AND (q.show_results_immediately OR a.grading_status = 'graded')
           THEN 100.0 * a.score / a.total_points
           ELSE NULL
         END AS score_percentage
@@ -80,8 +82,9 @@ async function getStudentAnalytics(userId) {
     SELECT
       COUNT(*)::int AS total_attempts,
       COUNT(DISTINCT quiz_id)::int AS unique_quizzes_attempted,
-      COUNT(*) FILTER (WHERE passed IS TRUE)::int AS pass_count,
-      COUNT(*) FILTER (WHERE passed IS FALSE)::int AS failure_count,
+      COUNT(*) FILTER (WHERE score_percentage IS NOT NULL)::int AS released_attempts,
+      COUNT(*) FILTER (WHERE score_percentage IS NOT NULL AND passed IS TRUE)::int AS pass_count,
+      COUNT(*) FILTER (WHERE score_percentage IS NOT NULL AND passed IS FALSE)::int AS failure_count,
       ROUND(AVG(score_percentage)::numeric, 2) AS average_score_percentage,
       ROUND(MAX(score_percentage)::numeric, 2) AS highest_score_percentage,
       ROUND(MIN(score_percentage)::numeric, 2) AS lowest_score_percentage,
@@ -100,10 +103,10 @@ async function getStudentAnalytics(userId) {
       c.id AS course_id,
       c.title AS course_title,
       q.max_attempts,
-      COUNT(a.id) FILTER (WHERE a.status = 'submitted')::int AS attempts_used,
+      COUNT(a.id)::int AS attempts_used,
       CASE
         WHEN q.max_attempts IS NULL THEN NULL
-        ELSE GREATEST(q.max_attempts - COUNT(a.id) FILTER (WHERE a.status = 'submitted')::int, 0)::int
+        ELSE GREATEST(q.max_attempts - COUNT(a.id)::int, 0)::int
       END AS attempts_remaining
     FROM enrollments e
     JOIN courses c ON c.id = e.course_id
@@ -112,6 +115,8 @@ async function getStudentAnalytics(userId) {
       ON a.quiz_id = q.id AND a.student_id = e.student_id
     WHERE e.student_id = $1
       AND e.status IN ('active', 'completed')
+      AND q.is_published = TRUE
+      AND q.archived_at IS NULL
     GROUP BY q.id, c.id, c.title, q.max_attempts
     ORDER BY c.title, q.title
   `;
@@ -121,9 +126,17 @@ async function getStudentAnalytics(userId) {
       c.id AS course_id,
       c.title AS course_title,
       COUNT(a.id) FILTER (WHERE a.status = 'submitted')::int AS attempts,
-      COUNT(a.id) FILTER (WHERE a.status = 'submitted' AND a.passed IS TRUE)::int AS passes,
+      COUNT(a.id) FILTER (
+        WHERE a.status = 'submitted'
+          AND a.grading_status <> 'pending_manual'
+          AND (q.show_results_immediately OR a.grading_status = 'graded')
+          AND a.passed IS TRUE
+      )::int AS passes,
       ROUND(
-        AVG(CASE WHEN a.status = 'submitted' AND a.total_points > 0
+        AVG(CASE WHEN a.status = 'submitted'
+          AND a.grading_status <> 'pending_manual'
+          AND (q.show_results_immediately OR a.grading_status = 'graded')
+          AND a.total_points > 0
           THEN 100.0 * a.score / a.total_points
           ELSE NULL
         END)::numeric,
@@ -146,12 +159,15 @@ async function getStudentAnalytics(userId) {
       COUNT(*)::int AS attempts,
       ROUND(
         AVG(CASE WHEN a.total_points > 0
+          AND a.grading_status <> 'pending_manual'
+          AND (q.show_results_immediately OR a.grading_status = 'graded')
           THEN 100.0 * a.score / a.total_points
           ELSE NULL
         END)::numeric,
         2
       ) AS average_score_percentage
     FROM quiz_attempts a
+    JOIN quizzes q ON q.id = a.quiz_id
     WHERE a.student_id = $1
       AND a.status = 'submitted'
       AND a.submitted_at IS NOT NULL
@@ -164,10 +180,13 @@ async function getStudentAnalytics(userId) {
     WITH scores AS (
       SELECT 100.0 * a.score / a.total_points AS percentage
       FROM quiz_attempts a
+      JOIN quizzes q ON q.id = a.quiz_id
       WHERE a.student_id = $1
         AND a.status = 'submitted'
         AND a.submitted_at IS NOT NULL
         AND a.total_points > 0
+        AND a.grading_status <> 'pending_manual'
+        AND (q.show_results_immediately OR a.grading_status = 'graded')
     )
     SELECT bucket, COUNT(*)::int AS attempts
     FROM (
@@ -199,14 +218,32 @@ async function getStudentAnalytics(userId) {
       c.id AS course_id,
       c.title AS course_title,
       a.attempt_number,
-      a.score AS raw_score,
-      a.total_points,
+      CASE
+        WHEN a.grading_status <> 'pending_manual'
+          AND (q.show_results_immediately OR a.grading_status = 'graded')
+        THEN a.score
+        ELSE NULL
+      END AS raw_score,
+      CASE
+        WHEN a.grading_status <> 'pending_manual'
+          AND (q.show_results_immediately OR a.grading_status = 'graded')
+        THEN a.total_points
+        ELSE NULL
+      END AS total_points,
       CASE WHEN a.total_points > 0
+        AND a.grading_status <> 'pending_manual'
+        AND (q.show_results_immediately OR a.grading_status = 'graded')
         THEN ROUND(100.0 * a.score / a.total_points, 2)
         ELSE NULL
       END AS score_percentage,
-      a.passed,
+      CASE
+        WHEN a.grading_status <> 'pending_manual'
+          AND (q.show_results_immediately OR a.grading_status = 'graded')
+        THEN a.passed
+        ELSE NULL
+      END AS passed,
       a.status,
+      a.grading_status,
       a.started_at,
       a.submitted_at
     FROM quiz_attempts a
@@ -502,11 +539,11 @@ async function getStudentAnalytics(userId) {
           : Number(quizSummary.lowest_score_percentage),
       quizPassCount: Number(quizSummary.pass_count),
       quizFailureCount: Number(quizSummary.failure_count),
-      quizPassRate: Number(quizSummary.total_attempts)
+      quizPassRate: Number(quizSummary.released_attempts)
         ? Number(
             (
               (100 * Number(quizSummary.pass_count)) /
-              Number(quizSummary.total_attempts)
+              Number(quizSummary.released_attempts)
             ).toFixed(1),
           )
         : null,
