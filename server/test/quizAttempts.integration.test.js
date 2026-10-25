@@ -15,6 +15,9 @@ let otherStudentId;
 let courseId;
 let enrollmentIds = [];
 let quizId;
+let delayedQuizId;
+let delayedQuestionId;
+let delayedOptionId;
 let questionIds = [];
 let optionIds = [];
 let instructorToken;
@@ -94,6 +97,38 @@ before(async () => {
     [courseId]
   );
   quizId = quiz.rows[0].id;
+
+  const delayedQuiz = await pool.query(
+    `INSERT INTO quizzes
+       (course_id, title, time_limit_minutes, passing_score, max_attempts,
+        is_published, show_results_immediately)
+     VALUES ($1, 'Delayed Result Test', 20, 50, 2, TRUE, FALSE)
+     RETURNING id`,
+    [courseId]
+  );
+  delayedQuizId = delayedQuiz.rows[0].id;
+
+  const delayedQuestion = await pool.query(
+    `INSERT INTO quiz_questions
+       (quiz_id, question_text, question_type, points, position)
+     VALUES ($1, 'Choose the correct answer.', 'single_choice', 1, 1)
+     RETURNING id`,
+    [delayedQuizId]
+  );
+  delayedQuestionId = delayedQuestion.rows[0].id;
+
+  const delayedOption = await pool.query(
+    `INSERT INTO quiz_options (question_id, option_text, is_correct, position)
+     VALUES ($1, 'Correct answer', TRUE, 1)
+     RETURNING id`,
+    [delayedQuestionId]
+  );
+  delayedOptionId = delayedOption.rows[0].id;
+  await pool.query(
+    `INSERT INTO quiz_options (question_id, option_text, is_correct, position)
+     VALUES ($1, 'Incorrect answer', FALSE, 2)`,
+    [delayedQuestionId]
+  );
 
   const choice = await pool.query(
     `INSERT INTO quiz_questions
@@ -181,6 +216,48 @@ after(async () => {
 });
 
 test("assessment attempts persist answers, enforce ownership, and support manual grading", async () => {
+  const invalidQuestion = await request(`/quizzes/${quizId}/questions`, {
+    token: instructorToken,
+    method: "POST",
+    body: {
+      question_text: "Choose one answer.",
+      question_type: "single_choice",
+      options: [
+        { text: "Same", is_correct: true },
+        { text: "same", is_correct: false },
+      ],
+    },
+  });
+  assert.equal(invalidQuestion.status, 400);
+
+  const delayedStart = await request(`/quizzes/${delayedQuizId}/attempts`, {
+    token: studentToken,
+    method: "POST",
+  });
+  assert.equal(delayedStart.status, 201);
+  const delayedAttemptId = delayedStart.body.attempt.id;
+  const delayedSaved = await request(
+    `/quiz-attempts/${delayedAttemptId}/answers/${delayedQuestionId}`,
+    {
+      token: studentToken,
+      method: "PUT",
+      body: { option_ids: [delayedOptionId], answer_text: "" },
+    }
+  );
+  assert.equal(delayedSaved.status, 200);
+  const delayedSubmitted = await request(
+    `/quiz-attempts/${delayedAttemptId}/submit`,
+    { token: studentToken, method: "POST", body: {} }
+  );
+  assert.equal(delayedSubmitted.status, 200);
+  assert.equal(delayedSubmitted.body.result.released, false);
+  assert.equal(delayedSubmitted.body.result.score, null);
+  const delayedResult = await request(
+    `/quiz-attempts/${delayedAttemptId}/result`,
+    { token: studentToken }
+  );
+  assert.equal(delayedResult.status, 202);
+
   const publicQuiz = await request(`/quizzes/${quizId}`, { token: studentToken });
   assert.equal(publicQuiz.status, 200);
   assert.equal("is_correct" in publicQuiz.body.quiz.questions[0].options[0], false);
@@ -255,7 +332,7 @@ test("assessment attempts persist answers, enforce ownership, and support manual
   });
   assert.equal(submitted.status, 200);
   assert.equal(submitted.body.result.grading_status, "pending_manual");
-  assert.equal(Number(submitted.body.result.score), 3);
+  assert.equal(submitted.body.result.score, null);
 
   const pendingResult = await request(`/quiz-attempts/${attemptId}/result`, {
     token: studentToken,

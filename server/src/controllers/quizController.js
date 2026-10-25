@@ -7,6 +7,23 @@ function fail(res, status, message) {
   return res.status(status).json({ success: false, message });
 }
 
+function releaseAttemptResult(result, showResultsImmediately) {
+  const released =
+    result.grading_status === "graded" ||
+    (showResultsImmediately && result.grading_status !== "pending_manual");
+
+  return released
+    ? { ...result, released: true }
+    : {
+        ...result,
+        score: null,
+        total_points: null,
+        passed: null,
+        percentage: null,
+        released: false,
+      };
+}
+
 async function canManageQuiz(user, quizId) {
   const result = await pool.query(
     `SELECT q.*, c.instructor_id
@@ -46,7 +63,7 @@ async function listQuizzes(req, res, next) {
     const result = await pool.query(
       `SELECT q.id, q.course_id, q.title, q.description,
               q.time_limit_minutes, q.passing_score, q.max_attempts,
-              q.is_published, q.created_at,
+              q.is_published, q.opens_at, q.closes_at, q.created_at,
               COUNT(DISTINCT qq.id)::int AS question_count
        FROM quizzes q
        LEFT JOIN quiz_questions qq ON qq.quiz_id = q.id
@@ -196,19 +213,41 @@ async function addQuestion(req, res, next) {
       return fail(res, 400, "Accepted answers must be non-empty text values.");
     }
     const choiceQuestion = ["single_choice", "multiple_choice", "true_false"].includes(question_type);
-    const correctCount = options.filter((option) => option.is_correct === true).length;
+    const invalidOption = options.some((option) =>
+      !option ||
+      typeof option !== "object" ||
+      typeof option.text !== "string" ||
+      option.text.trim().length === 0 ||
+      option.text.length > 1000 ||
+      typeof option.is_correct !== "boolean"
+    );
+    const correctCount = options.filter((option) => option?.is_correct === true).length;
+    const uniqueOptionTexts = new Set(
+      options
+        .filter((option) => typeof option?.text === "string")
+        .map((option) => option.text.trim().toLocaleLowerCase())
+    );
+    const uniqueAcceptedAnswers = new Set(
+      accepted_answers.map((answer) =>
+        answer.trim().replace(/\s+/g, " ").toLocaleLowerCase()
+      )
+    );
 
     if (
-        (choiceQuestion && (options.length < 2 || correctCount < 1)) ||
+        invalidOption ||
+        (choiceQuestion && (
+          options.length < 2 ||
+          correctCount < 1 ||
+          uniqueOptionTexts.size !== options.length
+        )) ||
+        (!choiceQuestion && options.length > 0) ||
         (question_type === "single_choice" && correctCount !== 1) ||
         (question_type === "true_false" && (options.length !== 2 || correctCount !== 1)) ||
-        (question_type === "short_answer" && accepted_answers.length === 0) ||
-        options.some((option) =>
-          typeof option.text !== "string" ||
-          option.text.trim().length === 0 ||
-          option.text.length > 1000 ||
-          typeof option.is_correct !== "boolean"
-        )) {
+        (question_type === "short_answer" && (
+          accepted_answers.length === 0 ||
+          uniqueAcceptedAnswers.size !== accepted_answers.length
+        )) ||
+        (question_type !== "short_answer" && accepted_answers.length > 0)) {
       return fail(res, 400, "Question options or accepted answers do not match its type.");
     }
 
@@ -762,7 +801,8 @@ async function submitAttempt(req, res, next) {
     await client.query("BEGIN");
 
     const attemptResult = await client.query(
-      `SELECT a.*, q.time_limit_minutes, q.passing_score
+      `SELECT a.*, q.time_limit_minutes, q.passing_score,
+              q.show_results_immediately
        FROM quiz_attempts a
        JOIN quizzes q ON q.id = a.quiz_id
        WHERE a.id = $1 AND a.student_id = $2
@@ -792,7 +832,10 @@ async function submitAttempt(req, res, next) {
       return res.json({
         success: true,
         message: "This attempt was already submitted.",
-        result: existingResult.rows[0],
+        result: releaseAttemptResult(
+          existingResult.rows[0],
+          attempt.show_results_immediately
+        ),
       });
     }
 
@@ -993,15 +1036,21 @@ async function submitAttempt(req, res, next) {
 
     await client.query("COMMIT");
 
-    return res.json({
-      success: true,
-      message: pendingManual
-        ? "Quiz submitted and is awaiting manual grading."
-        : "Quiz submitted and graded.",
-      result: {
+    const result = releaseAttemptResult(
+      {
         ...updated.rows[0],
         percentage: Number(percentage.toFixed(2)),
       },
+      attempt.show_results_immediately
+    );
+    return res.json({
+      success: true,
+      message: result.released
+        ? "Quiz submitted and graded."
+        : pendingManual
+          ? "Quiz submitted and is awaiting manual grading."
+          : "Quiz submitted. Your result will be available after it is published.",
+      result,
     });
   } catch (error) {
     try { await client.query("ROLLBACK"); } catch (_) {}

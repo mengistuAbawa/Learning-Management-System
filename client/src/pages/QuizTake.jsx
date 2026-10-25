@@ -59,6 +59,7 @@ export default function QuizTake() {
   const [flags, setFlags] = useState({});
   const [result, setResult] = useState(null);
   const [remaining, setRemaining] = useState(0);
+  const [attemptsRemaining, setAttemptsRemaining] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showUnanswered, setShowUnanswered] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -131,6 +132,12 @@ export default function QuizTake() {
       } else {
         const data = await getQuiz(quizId);
         setQuiz(data.quiz);
+        const usedAttempts = (attemptsData.attempts || []).filter(
+          (item) => String(item.quiz_id) === String(quizId)
+        ).length;
+        setAttemptsRemaining(
+          Math.max(0, Number(data.quiz.max_attempts) - usedAttempts)
+        );
         setAttempt(null);
         setResult(null);
         setAnswers({});
@@ -338,6 +345,7 @@ export default function QuizTake() {
 
   if (result) {
     const pending = result.grading_status === "pending_manual";
+    const released = result.released ?? result.score != null;
     return (
       <main className="min-h-screen bg-[#f3f6f4] px-4 py-12 text-slate-800">
         <section className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -352,9 +360,11 @@ export default function QuizTake() {
           <p className="mt-2 text-slate-600">
             {pending
               ? "Your written response is awaiting instructor grading."
-              : "Your score has been calculated."}
+              : released
+                ? "Your score has been calculated."
+                : "Your result will be available when your instructor publishes it."}
           </p>
-          {!pending && result.score != null && (
+          {!pending && released && result.score != null && (
             <>
               <p className="mt-6 text-5xl font-bold text-indigo-600">
                 {result.percentage ?? 0}%
@@ -444,6 +454,11 @@ export default function QuizTake() {
               <span className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 {quiz?.time_limit_minutes || 30} minutes
               </span>
+              {!isStarted && attemptsRemaining !== null && (
+                <span className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  {attemptsRemaining} attempts remaining
+                </span>
+              )}
               {isStarted ? (
                 <span className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 font-mono text-lg font-bold ${
                   remaining <= 60 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
@@ -454,11 +469,11 @@ export default function QuizTake() {
                 <button
                   type="button"
                   onClick={beginAttempt}
-                  disabled={starting || !questions.length}
+                  disabled={starting || !questions.length || attemptsRemaining === 0}
                   className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {starting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Start assessment
+                  {attemptsRemaining === 0 ? "No attempts remaining" : "Start assessment"}
                 </button>
               )}
             </div>

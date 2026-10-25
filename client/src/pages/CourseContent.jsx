@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ClipboardCheck,
   Clock,
   Edit3,
   FileText,
@@ -41,6 +42,7 @@ import {
   reorderLessons,
   updateLesson,
 } from "../services/lessonService";
+import { getQuizzes } from "../services/quizService";
 
 const EMPTY_MODULE = { title: "", description: "" };
 
@@ -332,12 +334,15 @@ export default function CourseContent() {
   const [expanded, setExpanded] = useState({});
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [courseVideos, setCourseVideos] = useState([]);
+  const [quizzes, setQuizzes] = useState([]);
+  const [quizError, setQuizError] = useState("");
   const [lessonPlaybackUrl, setLessonPlaybackUrl] = useState("");
   const [videoPlaybackError, setVideoPlaybackError] = useState("");
   const [videoProgressMessage, setVideoProgressMessage] = useState("");
   const lastVideoProgressPosition = useRef({});
 
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -351,6 +356,14 @@ export default function CourseContent() {
     try {
       const courseResult = await getCourseById(courseId);
       const moduleResult = await getModules(courseId);
+      try {
+        const quizResult = await getQuizzes(courseId);
+        setQuizzes(quizResult.quizzes || []);
+        setQuizError("");
+      } catch (loadError) {
+        setQuizzes([]);
+        setQuizError(errorText(loadError));
+      }
       let availableVideos = [];
       try {
         const videoResult = await api.get("/course-videos");
@@ -390,6 +403,11 @@ export default function CourseContent() {
   useEffect(() => {
     loadPage();
   }, [loadPage, refreshKey]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function refresh(message) {
     setNotice(message);
@@ -688,6 +706,111 @@ export default function CourseContent() {
               <X className="h-4 w-4" />
             </button>
           </div>
+        )}
+
+        {(canManage || quizzes.length > 0 || quizError) && (
+          <section className="mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck className="h-5 w-5 text-cyan-300" />
+                  <h2 className="text-xl font-bold">Course quizzes & assessments</h2>
+                </div>
+                <p className="mt-1 text-sm text-slate-400">
+                  Timed quizzes, practice, and graded course assessments.
+                </p>
+              </div>
+              {canManage && (
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    to="/instructor/quizzes/grading"
+                    className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:bg-white/5"
+                  >
+                    Review submissions
+                  </Link>
+                  <Link
+                    to={`/courses/${courseId}/quizzes/manage`}
+                    className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-400"
+                  >
+                    Manage quizzes
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {quizError ? (
+              <p role="alert" className="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-200">
+                {quizError}
+              </p>
+            ) : quizzes.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-400">
+                {canManage
+                  ? "No assessments yet. Create one to add questions and assessment rules."
+                  : "There are no published assessments for this course yet."}
+              </p>
+            ) : (
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                {quizzes.map((quiz) => {
+                  const opensAt = quiz.opens_at ? new Date(quiz.opens_at).getTime() : null;
+                  const closesAt = quiz.closes_at ? new Date(quiz.closes_at).getTime() : null;
+                  const upcoming = opensAt !== null && now < opensAt;
+                  const closed = closesAt !== null && now >= closesAt;
+                  const disabled = !canManage && (upcoming || closed);
+
+                  return (
+                    <article
+                      key={quiz.id}
+                      className="rounded-xl border border-white/10 bg-slate-950/70 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold text-white">{quiz.title}</h3>
+                          <p className="mt-1 text-sm text-slate-400">
+                            {quiz.question_count} questions · {quiz.time_limit_minutes} minutes ·{" "}
+                            {quiz.max_attempts} attempts · Pass {quiz.passing_score}%
+                          </p>
+                          {(opensAt || closesAt) && (
+                            <p className="mt-2 text-xs text-slate-500">
+                              {opensAt && `Opens ${new Date(opensAt).toLocaleString()}`}
+                              {opensAt && closesAt && " · "}
+                              {closesAt && `Closes ${new Date(closesAt).toLocaleString()}`}
+                            </p>
+                          )}
+                        </div>
+                        {canManage && (
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            quiz.is_published
+                              ? "bg-emerald-400/10 text-emerald-300"
+                              : "bg-amber-400/10 text-amber-200"
+                          }`}>
+                            {quiz.is_published ? "Published" : "Draft"}
+                          </span>
+                        )}
+                      </div>
+                      {!canManage && (
+                        <Link
+                          aria-disabled={disabled}
+                          tabIndex={disabled ? -1 : undefined}
+                          to={`/quizzes/${quiz.id}/take`}
+                          className={`mt-4 inline-flex rounded-lg px-3 py-2 text-sm font-semibold ${
+                            disabled
+                              ? "pointer-events-none bg-slate-800 text-slate-500"
+                              : "bg-cyan-600 text-white hover:bg-cyan-500"
+                          }`}
+                        >
+                          {upcoming
+                            ? "Not open yet"
+                            : closed
+                              ? "Assessment closed"
+                              : "Open assessment"}
+                        </Link>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         )}
 
         <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">

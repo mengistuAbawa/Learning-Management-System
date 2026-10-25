@@ -173,7 +173,7 @@ export default function QuizManagement() {
             <p className="text-sm font-semibold text-indigo-400">INSTRUCTOR WORKSPACE</p>
             <h1 className="mt-2 text-3xl font-bold">Quiz Management</h1>
             <p className="mt-2 text-slate-400">
-              Create assessments and build multiple-choice questions.
+              Create timed course assessments with validated questions and grading rules.
             </p>
           </div>
 
