@@ -18,6 +18,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getAdminAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
+import DashboardSidebar from "../components/DashboardSidebar";
 
 export default function AdminDashboardEnhanced() {
   const { user, logout } = useAuth();
@@ -35,6 +36,15 @@ export default function AdminDashboardEnhanced() {
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserForm, setEditUserForm] = useState({ full_name: "", email: "" });
   const [savingUserId, setSavingUserId] = useState(null);
+  const [showStudentForm, setShowStudentForm] = useState(false);
+  const [studentForm, setStudentForm] = useState({
+    full_name: "",
+    email: "",
+    password: "",
+  });
+  const [studentError, setStudentError] = useState("");
+  const [studentSuccess, setStudentSuccess] = useState("");
+  const [creatingStudent, setCreatingStudent] = useState(false);
   const [showInstructorForm, setShowInstructorForm] = useState(false);
   const [instructorForm, setInstructorForm] = useState({
     full_name: "",
@@ -101,6 +111,13 @@ export default function AdminDashboardEnhanced() {
 
   function handleInstructorChange(event) {
     setInstructorForm((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }));
+  }
+
+  function handleStudentChange(event) {
+    setStudentForm((current) => ({
       ...current,
       [event.target.name]: event.target.value,
     }));
@@ -238,6 +255,60 @@ export default function AdminDashboardEnhanced() {
     }
   }
 
+  async function handleCreateStudent(event) {
+    event.preventDefault();
+    setStudentError("");
+    setStudentSuccess("");
+    setCreatingStudent(true);
+
+    try {
+      const response = await api.post("/users/students", {
+        full_name: studentForm.full_name.trim(),
+        email: studentForm.email.trim(),
+        password: studentForm.password,
+      });
+
+      setAnalytics((current) =>
+        current
+          ? {
+              ...current,
+              summary: {
+                ...current.summary,
+                total_users: Number(current.summary.total_users || 0) + 1,
+                total_students:
+                  Number(current.summary.total_students || 0) + 1,
+              },
+            }
+          : current
+      );
+      setStudentForm({ full_name: "", email: "", password: "" });
+      setStudentSuccess(
+        `${response.data.user.full_name} can now sign in as a student.`
+      );
+      setShowStudentForm(false);
+      try {
+        const recentResponse = await api.get("/users/recent");
+        setRecentUsers(recentResponse.data.users || []);
+        setRecentUsersError("");
+      } catch (refreshError) {
+        setRecentUsersError(
+          refreshError.response?.data?.message ||
+            "Student account was created, but the recent-users list could not be refreshed."
+        );
+      }
+    } catch (requestError) {
+      const validationErrors = requestError.response?.data?.errors;
+      setStudentError(
+        validationErrors?.length
+          ? validationErrors.map((item) => item.message).join(" ")
+          : requestError.response?.data?.message ||
+              "Unable to create the student account. Please try again."
+      );
+    } finally {
+      setCreatingStudent(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
@@ -301,6 +372,19 @@ export default function AdminDashboardEnhanced() {
             <button
               type="button"
               onClick={() => {
+                setStudentError("");
+                setStudentSuccess("");
+                setShowStudentForm(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-600 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50"
+            >
+              <UserPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add Student</span>
+              <span className="sm:hidden">Student</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 setInstructorError("");
                 setInstructorSuccess("");
                 setShowInstructorForm(true);
@@ -351,7 +435,9 @@ export default function AdminDashboardEnhanced() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-start lg:px-6">
+        <DashboardSidebar role="admin" />
+        <main className="min-w-0 flex-1 py-2">
         {/* Error Alert */}
         {error && (
           <div
@@ -557,6 +643,114 @@ export default function AdminDashboardEnhanced() {
           )}
         </section>
 
+        <section
+          id="student-accounts"
+          className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <h2 className="font-semibold text-slate-900">Student accounts</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Create an active student account with a temporary password.
+          </p>
+
+          {studentSuccess && (
+            <p
+              role="status"
+              className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700"
+            >
+              {studentSuccess}
+            </p>
+          )}
+
+          {showStudentForm && (
+            <form
+              onSubmit={handleCreateStudent}
+              className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2"
+            >
+              {studentError && (
+                <p
+                  role="alert"
+                  className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 sm:col-span-2"
+                >
+                  {studentError}
+                </p>
+              )}
+
+              <label className="text-sm font-medium text-slate-700">
+                Full name
+                <input
+                  name="full_name"
+                  type="text"
+                  autoComplete="name"
+                  minLength={2}
+                  maxLength={150}
+                  required
+                  value={studentForm.full_name}
+                  onChange={handleStudentChange}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                />
+              </label>
+
+              <label className="text-sm font-medium text-slate-700">
+                Email address
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  maxLength={255}
+                  required
+                  value={studentForm.email}
+                  onChange={handleStudentChange}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                />
+              </label>
+
+              <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                Temporary password
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                  value={studentForm.password}
+                  onChange={handleStudentChange}
+                  aria-describedby="student-password-help"
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                />
+                <span
+                  id="student-password-help"
+                  className="mt-1 block text-xs font-normal text-slate-500"
+                >
+                  Use at least 8 characters, including uppercase, lowercase, a number, and a symbol.
+                </span>
+              </label>
+
+              <div className="flex gap-3 sm:col-span-2">
+                <button
+                  type="submit"
+                  disabled={creatingStudent}
+                  className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {creatingStudent ? "Creating account..." : "Create student"}
+                </button>
+                <button
+                  type="button"
+                  disabled={creatingStudent}
+                  onClick={() => {
+                    setShowStudentForm(false);
+                    setStudentForm({ full_name: "", email: "", password: "" });
+                    setStudentError("");
+                  }}
+                  className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
+
         <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-slate-900">Instructor accounts</h2>
           <p className="mt-1 text-sm text-slate-600">
@@ -665,7 +859,10 @@ export default function AdminDashboardEnhanced() {
         {/* Recently Added Users & Courses */}
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Recently Added Users */}
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div
+            id="recent-users"
+            className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+          >
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-bold text-slate-900">Recently Added Users</h2>
               <Link
@@ -886,7 +1083,8 @@ export default function AdminDashboardEnhanced() {
             reserved.
           </p>
         </footer>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

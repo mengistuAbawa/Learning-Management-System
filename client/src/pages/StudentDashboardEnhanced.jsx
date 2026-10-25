@@ -28,6 +28,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NotificationBell from "../components/NotificationBell";
+import DashboardSidebar from "../components/DashboardSidebar";
 import {
   getMyEnrollments,
   getCourseEnrollments,
@@ -222,7 +223,9 @@ export default function StudentDashboardEnhanced() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-start lg:px-6">
+        <DashboardSidebar role="student" />
+        <main className="min-w-0 flex-1 py-2">
         {/* Error Alert */}
         {error && (
           <div
@@ -503,7 +506,8 @@ export default function StudentDashboardEnhanced() {
         <footer className="mt-12 border-t border-slate-200 pt-6 text-center text-sm text-slate-500">
           <p>© {new Date().getFullYear()} Coligo LMS. All rights reserved.</p>
         </footer>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

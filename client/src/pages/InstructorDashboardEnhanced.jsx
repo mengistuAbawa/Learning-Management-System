@@ -24,6 +24,7 @@ import { useAuth } from "../context/AuthContext";
 import { getAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
 import CourseVideoRecorder from "../components/CourseVideoRecorder";
+import DashboardSidebar from "../components/DashboardSidebar";
 
 export default function InstructorDashboardEnhanced() {
   const { user, logout } = useAuth();
@@ -272,7 +273,9 @@ export default function InstructorDashboardEnhanced() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-start lg:px-6">
+        <DashboardSidebar role="instructor" />
+        <main className="min-w-0 flex-1 py-2">
         {/* Error Alert */}
         {error && (
           <div
@@ -577,7 +580,8 @@ export default function InstructorDashboardEnhanced() {
             © {new Date().getFullYear()} Instructor Portal. All rights reserved.
           </p>
         </footer>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

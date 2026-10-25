@@ -1,7 +1,38 @@
+const bcrypt = require("bcryptjs");
 const { pool } = require("../config/db");
+
+const SALT_ROUNDS = 12;
 
 function sendError(res, status, message) {
   return res.status(status).json({ success: false, message });
+}
+
+async function createStudent(req, res, next) {
+  try {
+    const passwordHash = await bcrypt.hash(req.body.password, SALT_ROUNDS);
+    const result = await pool.query(
+      `INSERT INTO users (full_name, email, password_hash, role)
+       VALUES ($1, $2, $3, 'student')
+       RETURNING id, full_name, email, role, avatar_url,
+                 bio, is_active, created_at`,
+      [
+        req.body.full_name.trim(),
+        req.body.email.trim().toLowerCase(),
+        passwordHash,
+      ]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Student account created successfully.",
+      user: result.rows[0],
+    });
+  } catch (error) {
+    if (error.code === "23505") {
+      return sendError(res, 409, "An account with this email already exists.");
+    }
+    return next(error);
+  }
 }
 
 async function getRecentUsers(req, res, next) {
@@ -141,6 +172,7 @@ async function deleteUser(req, res, next) {
 }
 
 module.exports = {
+  createStudent,
   getRecentUsers,
   updateUser,
   updateUserStatus,

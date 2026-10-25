@@ -12,6 +12,7 @@ let adminId;
 let studentId;
 let targetId;
 let deleteTargetId;
+const createdStudentIds = [];
 let adminToken;
 let studentToken;
 
@@ -73,7 +74,13 @@ before(async () => {
 after(async () => {
   if (server) await new Promise((resolve) => server.close(resolve));
   try {
-    const ids = [adminId, studentId, targetId, deleteTargetId].filter(Boolean);
+    const ids = [
+      adminId,
+      studentId,
+      targetId,
+      deleteTargetId,
+      ...createdStudentIds,
+    ].filter(Boolean);
     if (ids.length) {
       await pool.query("DELETE FROM users WHERE id = ANY($1::bigint[])", [ids]);
     }
@@ -83,6 +90,59 @@ after(async () => {
 });
 
 test("administrator user-management endpoints enforce permissions and persist changes", async (t) => {
+  await t.test("public and administrator registration can create students only", async () => {
+    const accountDetails = {
+      full_name: "Managed Student",
+      email: `managed-student-${Date.now()}@example.invalid`,
+      password: "StrongPass1!",
+      role: "admin",
+    };
+
+    assert.equal(
+      (await request("/users/students", {
+        method: "POST",
+        body: accountDetails,
+      })).status,
+      401
+    );
+    assert.equal(
+      (await request("/users/students", {
+        token: studentToken,
+        method: "POST",
+        body: accountDetails,
+      })).status,
+      403
+    );
+
+    const managed = await request("/users/students", {
+      token: adminToken,
+      method: "POST",
+      body: accountDetails,
+    });
+    assert.equal(managed.status, 201);
+    assert.equal(managed.body.user.role, "student");
+    createdStudentIds.push(managed.body.user.id);
+
+    const publicRegistration = await request("/auth/register", {
+      method: "POST",
+      body: {
+        full_name: "Self Registered Student",
+        email: `self-registered-${Date.now()}@example.invalid`,
+        password: "StrongPass1!",
+        role: "instructor",
+      },
+    });
+    assert.equal(publicRegistration.status, 201);
+    assert.equal(publicRegistration.body.user.role, "student");
+    createdStudentIds.push(publicRegistration.body.user.id);
+
+    const publicInstructorCreation = await request("/auth/instructors", {
+      method: "POST",
+      body: accountDetails,
+    });
+    assert.equal(publicInstructorCreation.status, 401);
+  });
+
   await t.test("only administrators may list recent users", async () => {
     assert.equal((await request("/users/recent")).status, 401);
     assert.equal(

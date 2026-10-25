@@ -25,6 +25,45 @@ const validateId = param("id")
   .withMessage("User ID must be a positive integer.");
 
 router.use(authenticate, authorize("admin"));
+router.post(
+  "/students",
+  body("full_name")
+    .isString()
+    .withMessage("Full name must be text.")
+    .bail()
+    .trim()
+    .isLength({ min: 2, max: 150 })
+    .withMessage("Full name must contain 2–150 characters.")
+    .matches(/^[\p{L}\p{M}][\p{L}\p{M}\s'.-]*$/u)
+    .withMessage("Full name contains unsupported characters."),
+  body("email")
+    .isString()
+    .withMessage("Email must be text.")
+    .bail()
+    .trim()
+    .isEmail()
+    .withMessage("Enter a valid email address.")
+    .bail()
+    .isLength({ max: 255 })
+    .withMessage("Email must not exceed 255 characters.")
+    .normalizeEmail(),
+  body("password")
+    .isString()
+    .withMessage("Password must be text.")
+    .bail()
+    .isStrongPassword({
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    })
+    .withMessage(
+      "Password must have at least 8 characters, including uppercase, lowercase, a number, and a symbol."
+    ),
+  validateRequest,
+  controller.createStudent
+);
 router.get("/recent", controller.getRecentUsers);
 router.patch(
   "/:id",
