@@ -10,19 +10,26 @@ import {
 const initialQuiz = {
   title: "",
   description: "",
+  instructions: "",
   time_limit_minutes: 30,
   passing_score: 50,
   max_attempts: 3,
   is_published: false,
+  opens_at: "",
+  closes_at: "",
+  shuffle_questions: false,
+  shuffle_options: false,
+  show_results_immediately: true,
+  allow_answer_review: true,
 };
 
 const initialQuestion = {
   question_text: "",
+  question_type: "single_choice",
   points: 1,
+  accepted_answers: "",
   options: [
     { text: "", is_correct: true },
-    { text: "", is_correct: false },
-    { text: "", is_correct: false },
     { text: "", is_correct: false },
   ],
 };
@@ -68,6 +75,12 @@ export default function QuizManagement() {
         time_limit_minutes: Number(quizForm.time_limit_minutes),
         passing_score: Number(quizForm.passing_score),
         max_attempts: Number(quizForm.max_attempts),
+        opens_at: quizForm.opens_at
+          ? new Date(quizForm.opens_at).toISOString()
+          : null,
+        closes_at: quizForm.closes_at
+          ? new Date(quizForm.closes_at).toISOString()
+          : null,
       });
 
       setSelectedQuiz(String(result.quiz.id));
@@ -92,7 +105,18 @@ export default function QuizManagement() {
       await addQuestion(selectedQuiz, {
         ...questionForm,
         points: Number(questionForm.points),
-        options: questionForm.options.filter((option) => option.text.trim()),
+        accepted_answers:
+          questionForm.question_type === "short_answer"
+            ? questionForm.accepted_answers
+                .split("\n")
+                .map((answer) => answer.trim())
+                .filter(Boolean)
+            : [],
+        options: ["single_choice", "multiple_choice", "true_false"].includes(
+          questionForm.question_type
+        )
+          ? questionForm.options.filter((option) => option.text.trim())
+          : [],
       });
 
       setQuestionForm(initialQuestion);
@@ -119,6 +143,25 @@ export default function QuizManagement() {
     setQuestionForm((previous) => ({
       ...previous,
       options: [...previous.options, { text: "", is_correct: false }],
+    }));
+  }
+
+  function changeQuestionType(question_type) {
+    setQuestionForm((previous) => ({
+      ...previous,
+      question_type,
+      options:
+        question_type === "true_false"
+          ? [
+              { text: "True", is_correct: true },
+              { text: "False", is_correct: false },
+            ]
+          : previous.options.length >= 2
+            ? previous.options
+            : [
+                { text: "", is_correct: true },
+                { text: "", is_correct: false },
+              ],
     }));
   }
 
@@ -175,6 +218,20 @@ export default function QuizManagement() {
                 placeholder="e.g. React Fundamentals Quiz"
               />
             </label>
+            <label className="space-y-2 sm:col-span-2">
+              <span className="text-sm text-slate-300">Student instructions</span>
+              <textarea
+                rows={3}
+                maxLength={10000}
+                value={quizForm.instructions}
+                onChange={(event) => setQuizForm({
+                  ...quizForm,
+                  instructions: event.target.value,
+                })}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-indigo-500"
+                placeholder="Instructions shown before students begin."
+              />
+            </label>
 
             <label className="space-y-2 sm:col-span-2">
               <span className="text-sm text-slate-300">Description</span>
@@ -220,6 +277,51 @@ export default function QuizManagement() {
                 max_attempts: value,
               })}
             />
+
+            <label className="space-y-2">
+              <span className="text-sm text-slate-300">Opens at</span>
+              <input
+                type="datetime-local"
+                value={quizForm.opens_at}
+                onChange={(event) => setQuizForm({
+                  ...quizForm,
+                  opens_at: event.target.value,
+                })}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm text-slate-300">Closes at</span>
+              <input
+                type="datetime-local"
+                value={quizForm.closes_at}
+                onChange={(event) => setQuizForm({
+                  ...quizForm,
+                  closes_at: event.target.value,
+                })}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3"
+              />
+            </label>
+
+            {[
+              ["shuffle_questions", "Shuffle question order"],
+              ["shuffle_options", "Shuffle answer options"],
+              ["show_results_immediately", "Release results immediately"],
+              ["allow_answer_review", "Allow answer review after release"],
+            ].map(([name, label]) => (
+              <label key={name} className="flex items-center gap-3 rounded-xl border border-slate-700 p-3">
+                <input
+                  type="checkbox"
+                  checked={quizForm[name]}
+                  onChange={(event) => setQuizForm({
+                    ...quizForm,
+                    [name]: event.target.checked,
+                  })}
+                  className="h-4 w-4 accent-indigo-500"
+                />
+                <span className="text-sm">{label}</span>
+              </label>
+            ))}
 
             <label className="flex items-center gap-3 self-end rounded-xl border border-slate-700 p-3">
               <input
@@ -297,9 +399,47 @@ export default function QuizManagement() {
               })}
             />
 
-            <div className="space-y-3">
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">Question type</span>
+              <select
+                value={questionForm.question_type}
+                onChange={(event) => changeQuestionType(event.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3"
+              >
+                <option value="single_choice">Single choice</option>
+                <option value="multiple_choice">Multiple select</option>
+                <option value="true_false">True / false</option>
+                <option value="short_answer">Short answer (exact match)</option>
+                <option value="essay">Essay (manual grading)</option>
+              </select>
+            </label>
+
+            {questionForm.question_type === "short_answer" && (
+              <label className="block space-y-2">
+                <span className="text-sm text-slate-300">
+                  Accepted answers (one per line; exact match after case/space normalization)
+                </span>
+                <textarea
+                  required
+                  rows={3}
+                  value={questionForm.accepted_answers}
+                  onChange={(event) => setQuestionForm({
+                    ...questionForm,
+                    accepted_answers: event.target.value,
+                  })}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3"
+                  placeholder={"React\nreact"}
+                />
+              </label>
+            )}
+
+            {["single_choice", "multiple_choice", "true_false"].includes(
+              questionForm.question_type
+            ) && <div className="space-y-3">
               <p className="text-sm font-semibold text-slate-300">
-                Answer options — select exactly one correct answer
+                {questionForm.question_type === "multiple_choice"
+                  ? "Answer options — select all correct answers"
+                  : "Answer options — select exactly one correct answer"}
               </p>
 
               {questionForm.options.map((option, index) => (
@@ -318,16 +458,22 @@ export default function QuizManagement() {
                   />
                   <label className="flex items-center gap-2 text-sm">
                     <input
-                      type="radio"
+                      type={questionForm.question_type === "multiple_choice" ? "checkbox" : "radio"}
                       name="correct-option"
                       checked={option.is_correct}
-                      onChange={() => setQuestionForm((previous) => ({
-                        ...previous,
-                        options: previous.options.map((item, itemIndex) => ({
-                          ...item,
-                          is_correct: itemIndex === index,
-                        })),
-                      }))}
+                      onChange={() => {
+                        if (questionForm.question_type === "multiple_choice") {
+                          updateOption(index, { is_correct: !option.is_correct });
+                        } else {
+                          setQuestionForm((previous) => ({
+                            ...previous,
+                            options: previous.options.map((item, itemIndex) => ({
+                              ...item,
+                              is_correct: itemIndex === index,
+                            })),
+                          }));
+                        }
+                      }}
                       className="accent-emerald-500"
                     />
                     Correct
@@ -335,12 +481,15 @@ export default function QuizManagement() {
                   {questionForm.options.length > 2 && (
                     <button
                       type="button"
-                      onClick={() => setQuestionForm((previous) => ({
-                        ...previous,
-                        options: previous.options
-                          .filter((_, optionIndex) => optionIndex !== index)
-                          .map((item) => ({ ...item, is_correct: false })),
-                      }))}
+                      onClick={() => setQuestionForm((previous) => {
+                        const options = previous.options.filter(
+                          (_, optionIndex) => optionIndex !== index
+                        );
+                        if (!options.some((item) => item.is_correct) && options.length) {
+                          options[0].is_correct = true;
+                        }
+                        return { ...previous, options };
+                      })}
                       className="text-sm text-red-300 hover:text-red-200"
                     >
                       Remove
@@ -357,7 +506,7 @@ export default function QuizManagement() {
               >
                 + Add option
               </button>
-            </div>
+            </div>}
 
             <button
               disabled={saving || !selectedQuiz}

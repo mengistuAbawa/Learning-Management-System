@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import {
+  enrollStudentInCourse,
   getCourseEnrollments,
   updateEnrollmentStatus,
 } from "../services/enrollmentService";
@@ -23,17 +24,22 @@ export default function CourseEnrollments() {
   const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [studentEmail, setStudentEmail] = useState("");
+  const [addingStudent, setAddingStudent] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const canManage = ["admin", "instructor"].includes(user?.role);
 
-  const loadEnrollments = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const fetchEnrollments = useCallback(
+    () => getCourseEnrollments(courseId),
+    [courseId]
+  );
 
+  const loadEnrollments = useCallback(async () => {
+    setError("");
     try {
-      const response = await getCourseEnrollments(courseId);
+      const response = await fetchEnrollments();
       setEnrollments(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       setError(
@@ -43,11 +49,39 @@ export default function CourseEnrollments() {
     } finally {
       setLoading(false);
     }
-  }, [courseId]);
+  }, [fetchEnrollments]);
+
+  function refreshEnrollments() {
+    setLoading(true);
+    setError("");
+    loadEnrollments();
+  }
 
   useEffect(() => {
-    loadEnrollments();
-  }, [loadEnrollments]);
+    let active = true;
+
+    fetchEnrollments()
+      .then((response) => {
+        if (active) {
+          setEnrollments(Array.isArray(response.data) ? response.data : []);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setError(
+            err.response?.data?.message ||
+              "Could not load enrollments. Check your course permissions."
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [fetchEnrollments]);
 
   async function changeStatus(enrollment, status) {
     setBusyId(enrollment.id);
@@ -72,6 +106,30 @@ export default function CourseEnrollments() {
       );
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function handleAdminEnrollment(event) {
+    event.preventDefault();
+    setAddingStudent(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await enrollStudentInCourse(
+        courseId,
+        studentEmail.trim()
+      );
+      setStudentEmail("");
+      setNotice(response.message || "Student enrolled successfully.");
+      await loadEnrollments();
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Could not enroll this student. Verify the email and account status."
+      );
+    } finally {
+      setAddingStudent(false);
     }
   }
 
@@ -121,7 +179,7 @@ export default function CourseEnrollments() {
 
           <button
             type="button"
-            onClick={loadEnrollments}
+            onClick={refreshEnrollments}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm hover:bg-white/5 disabled:opacity-50"
           >
@@ -153,6 +211,37 @@ export default function CourseEnrollments() {
             <p className="mt-2 text-3xl font-bold text-emerald-300">{activeCount}</p>
           </div>
         </div>
+
+        {user?.role === "admin" && (
+          <form
+            onSubmit={handleAdminEnrollment}
+            className="mb-6 rounded-2xl border border-white/10 bg-slate-900 p-5"
+          >
+            <label className="block space-y-2">
+              <span className="font-semibold">Enroll an approved student</span>
+              <span className="block text-sm text-slate-400">
+                Enter the email address on an active, approved student account.
+              </span>
+              <input
+                type="email"
+                required
+                maxLength={255}
+                value={studentEmail}
+                onChange={(event) => setStudentEmail(event.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+                placeholder="student@example.com"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={addingStudent || !studentEmail.trim()}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {addingStudent && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              Enroll student
+            </button>
+          </form>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center gap-3 py-16 text-slate-400">

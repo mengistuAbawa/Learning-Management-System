@@ -15,6 +15,7 @@ import MyLearning from "./pages/MyLearning";
 import CourseEnrollments from "./pages/CourseEnrollments";
 import QuizTake from "./pages/QuizTake";
 import QuizManagement from "./pages/QuizManagement";
+import QuizGrading from "./pages/QuizGrading";
 import CourseAssignments from "./pages/CourseAssignments";
 import Notifications from "./pages/Notifications";
 import Analytics from "./pages/Analytics";
@@ -125,6 +126,14 @@ export default function App() {
           element={
             <RoleRoute allowedRoles={["instructor", "admin"]}>
               <QuizManagement />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/instructor/quizzes/grading"
+          element={
+            <RoleRoute allowedRoles={["instructor", "admin"]}>
+              <QuizGrading />
             </RoleRoute>
           }
         />

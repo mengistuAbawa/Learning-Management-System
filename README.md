@@ -14,3 +14,17 @@ cd server
 node scripts\apply-migration.js ..\database\migrations\20261024_course_videos.sql
 node scripts\apply-migration.js ..\database\migrations\20261024_course_video_status.sql
 ```
+
+## Student registration approval
+
+Public student registrations remain pending until an administrator approves them.
+Existing accounts remain approved by the additive migration, while account activation
+continues to be controlled separately by `is_active`. Pending registrations can be
+reviewed from the administrator dashboard; students can sign in after approval.
+
+Apply the migration from Windows CMD before starting the updated backend:
+
+```cmd
+cd /d D:\xampp\htdocs\LearnSphere-LMS\server
+node scripts\apply-migration.js ..\database\migrations\20261025_student_approval.sql
+```

@@ -11,11 +11,17 @@ let baseUrl;
 let instructorId;
 let otherInstructorId;
 let studentId;
+let pendingStudentId;
+let adminId;
 let courseId;
 let enrollmentId;
+let adminEnrollmentId;
 let instructorToken;
 let otherInstructorToken;
 let studentToken;
+let adminToken;
+let studentEmail;
+let pendingStudentEmail;
 
 function signToken(userId) {
   return jwt.sign({ sub: String(userId) }, process.env.JWT_SECRET, {
@@ -61,6 +67,15 @@ before(async () => {
   instructorId = await insertUser(`${suffix}-owner`, "instructor");
   otherInstructorId = await insertUser(`${suffix}-other`, "instructor");
   studentId = await insertUser(`${suffix}-student`, "student");
+  pendingStudentId = await insertUser(`${suffix}-pending`, "student");
+  adminId = await insertUser(`${suffix}-admin`, "admin");
+  studentEmail = `enrollment-management-${suffix}-student-student@example.invalid`;
+  pendingStudentEmail =
+    `enrollment-management-${suffix}-pending-student@example.invalid`;
+  await pool.query(
+    "UPDATE users SET approval_status = 'pending' WHERE id = $1",
+    [pendingStudentId]
+  );
 
   const course = await pool.query(
     `INSERT INTO courses (instructor_id, title, slug, description, status)
@@ -81,6 +96,7 @@ before(async () => {
   instructorToken = signToken(instructorId);
   otherInstructorToken = signToken(otherInstructorId);
   studentToken = signToken(studentId);
+  adminToken = signToken(adminId);
 
   server = app.listen(0, "127.0.0.1");
   await new Promise((resolve, reject) => {
@@ -93,13 +109,23 @@ before(async () => {
 after(async () => {
   if (server) await new Promise((resolve) => server.close(resolve));
   try {
-    if (enrollmentId) {
-      await pool.query("DELETE FROM enrollments WHERE id = $1", [enrollmentId]);
+    const enrollments = [enrollmentId, adminEnrollmentId].filter(Boolean);
+    if (enrollments.length) {
+      await pool.query(
+        "DELETE FROM enrollments WHERE id = ANY($1::bigint[])",
+        [enrollments]
+      );
     }
     if (courseId) {
       await pool.query("DELETE FROM courses WHERE id = $1", [courseId]);
     }
-    const userIds = [instructorId, otherInstructorId, studentId].filter(Boolean);
+    const userIds = [
+      instructorId,
+      otherInstructorId,
+      studentId,
+      pendingStudentId,
+      adminId,
+    ].filter(Boolean);
     if (userIds.length) {
       await pool.query("DELETE FROM users WHERE id = ANY($1::bigint[])", [
         userIds,
@@ -161,5 +187,60 @@ test("instructors can manage enrollment status only in courses they own", async 
       }
     );
     assert.equal(otherInstructorUpdate.status, 403);
+  });
+
+  await t.test("administrators enroll only approved active students", async () => {
+    const forbidden = await request(
+      `/enrollments/courses/${courseId}/students`,
+      {
+        token: studentToken,
+        method: "POST",
+        body: { student_email: studentEmail },
+      }
+    );
+    assert.equal(forbidden.status, 403);
+
+    const enrolled = await request(
+      `/enrollments/courses/${courseId}/students`,
+      {
+        token: adminToken,
+        method: "POST",
+        body: { student_email: studentEmail },
+      }
+    );
+    assert.equal(enrolled.status, 201);
+    assert.equal(String(enrolled.body.data.student_id), String(studentId));
+    adminEnrollmentId = enrolled.body.data.id;
+
+    const duplicate = await request(
+      `/enrollments/courses/${courseId}/students`,
+      {
+        token: adminToken,
+        method: "POST",
+        body: { student_email: studentEmail },
+      }
+    );
+    assert.equal(duplicate.status, 409);
+
+    const pending = await request(
+      `/enrollments/courses/${courseId}/students`,
+      {
+        token: adminToken,
+        method: "POST",
+        body: { student_email: pendingStudentEmail },
+      }
+    );
+    assert.equal(pending.status, 403);
+
+    const removed = await request(
+      `/enrollments/${adminEnrollmentId}/status`,
+      {
+        token: adminToken,
+        method: "PATCH",
+        body: { status: "cancelled" },
+      }
+    );
+    assert.equal(removed.status, 200);
+    assert.equal(removed.body.data.status, "cancelled");
   });
 });

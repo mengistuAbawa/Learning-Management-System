@@ -11,6 +11,12 @@ import {
   Bell,
   Search,
   UserPlus,
+  Pencil,
+  Trash2,
+  UserCheck,
+  UserX,
+  Check,
+  X,
   Moon,
   Sun,
 } from "lucide-react";
@@ -32,6 +38,10 @@ export default function AdminDashboardEnhanced() {
   );
   const [recentUsers, setRecentUsers] = useState([]);
   const [recentUsersError, setRecentUsersError] = useState("");
+  const [pendingStudents, setPendingStudents] = useState([]);
+  const [pendingStudentsError, setPendingStudentsError] = useState("");
+  const [loadingPendingStudents, setLoadingPendingStudents] = useState(true);
+  const [approvalActionError, setApprovalActionError] = useState("");
   const [userActionError, setUserActionError] = useState("");
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserForm, setEditUserForm] = useState({ full_name: "", email: "" });
@@ -104,6 +114,25 @@ export default function AdminDashboardEnhanced() {
     );
   }, [darkTheme]);
 
+  useEffect(() => {
+    async function loadPendingStudents() {
+      try {
+        const response = await api.get("/users/students/pending");
+        setPendingStudents(response.data.students || []);
+        setPendingStudentsError("");
+      } catch (requestError) {
+        setPendingStudentsError(
+          requestError.response?.data?.message ||
+            "Unable to load pending student registrations."
+        );
+      } finally {
+        setLoadingPendingStudents(false);
+      }
+    }
+
+    loadPendingStudents();
+  }, []);
+
   function handleLogout() {
     logout();
     navigate("/login", { replace: true });
@@ -170,6 +199,60 @@ export default function AdminDashboardEnhanced() {
       setUserActionError(
         requestError.response?.data?.message ||
           `Unable to ${account.is_active ? "deactivate" : "activate"} this account.`
+      );
+    } finally {
+      setSavingUserId(null);
+    }
+  }
+
+  async function reviewStudentRegistration(student, approvalStatus) {
+    if (
+      approvalStatus === "rejected" &&
+      !window.confirm(`Reject ${student.full_name}'s registration?`)
+    ) {
+      return;
+    }
+
+    setSavingUserId(String(student.id));
+    setApprovalActionError("");
+    try {
+      const response = await api.patch(
+        `/users/students/${student.id}/approval`,
+        { approval_status: approvalStatus }
+      );
+      setPendingStudents((students) =>
+        students.filter((item) => String(item.id) !== String(student.id))
+      );
+      setAnalytics((current) => {
+        if (!current) return current;
+        const approved = approvalStatus === "approved";
+        return {
+          ...current,
+          summary: {
+            ...current.summary,
+            total_students:
+              Number(current.summary.total_students || 0) + (approved ? 1 : 0),
+            active_students:
+              Number(current.summary.active_students || 0) +
+              (approved && response.data.user.is_active ? 1 : 0),
+            pending_student_registrations: Math.max(
+              0,
+              Number(current.summary.pending_student_registrations || 0) - 1
+            ),
+          },
+        };
+      });
+      setRecentUsers((accounts) =>
+        accounts.map((account) =>
+          String(account.id) === String(student.id)
+            ? response.data.user
+            : account
+        )
+      );
+    } catch (requestError) {
+      setApprovalActionError(
+        requestError.response?.data?.message ||
+          `Unable to ${approvalStatus} this student registration.`
       );
     } finally {
       setSavingUserId(null);
@@ -277,6 +360,8 @@ export default function AdminDashboardEnhanced() {
                 total_users: Number(current.summary.total_users || 0) + 1,
                 total_students:
                   Number(current.summary.total_students || 0) + 1,
+                active_students:
+                  Number(current.summary.active_students || 0) + 1,
               },
             }
           : current
@@ -500,9 +585,9 @@ export default function AdminDashboardEnhanced() {
                     color: "bg-indigo-100 text-indigo-700",
                   },
                   {
-                    label: "Students",
+                    label: "Approved students",
                     value: summary.total_students,
-                    detail: `${summary.total_instructors} instructors`,
+                    detail: `${summary.active_students} active · ${summary.pending_student_registrations} pending`,
                     icon: UserRound,
                     color: "bg-cyan-100 text-cyan-700",
                   },
@@ -856,6 +941,74 @@ export default function AdminDashboardEnhanced() {
           )}
         </section>
 
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <h2 className="font-bold text-slate-900">Pending Student Registrations</h2>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
+              {pendingStudents.length} pending
+            </span>
+          </div>
+
+          {pendingStudentsError ? (
+            <p role="alert" className="text-sm text-rose-700">
+              {pendingStudentsError}
+            </p>
+          ) : loadingPendingStudents ? (
+            <p className="text-sm text-slate-500">Loading pending registrations...</p>
+          ) : pendingStudents.length === 0 ? (
+            <p className="text-sm text-slate-500">There are no student registrations awaiting review.</p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {pendingStudents.map((student) => {
+                const isBusy = savingUserId === String(student.id);
+                return (
+                  <div
+                    key={student.id}
+                    className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-semibold text-slate-900">{student.full_name}</p>
+                      <p className="text-sm text-slate-500">{student.email}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Registered {new Date(student.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={Boolean(savingUserId)}
+                        onClick={() => reviewStudentRegistration(student, "approved")}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        {isBusy ? (
+                          <Loader className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <UserCheck className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={Boolean(savingUserId)}
+                        onClick={() => reviewStudentRegistration(student, "rejected")}
+                        className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                      >
+                        <UserX className="h-4 w-4" aria-hidden="true" />
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {approvalActionError && (
+            <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+              {approvalActionError}
+            </p>
+          )}
+        </section>
+
         {/* Recently Added Users & Courses */}
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Recently Added Users */}
@@ -957,17 +1110,25 @@ export default function AdminDashboardEnhanced() {
                               type="button"
                               disabled={isBusy}
                               onClick={() => saveUser(account.id)}
-                              className="rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                              aria-label={isBusy ? "Saving user changes" : "Save user changes"}
+                              title={isBusy ? "Saving..." : "Save changes"}
+                              className="rounded-md bg-indigo-600 p-2 text-white hover:bg-indigo-500 disabled:opacity-50"
                             >
-                              {isBusy ? "Saving..." : "Save"}
+                              {isBusy ? (
+                                <Loader className="h-4 w-4 animate-spin" aria-hidden="true" />
+                              ) : (
+                                <Check className="h-4 w-4" aria-hidden="true" />
+                              )}
                             </button>
                             <button
                               type="button"
                               disabled={isBusy}
                               onClick={() => setEditingUserId(null)}
-                              className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              aria-label="Cancel editing user"
+                              title="Cancel"
+                              className="rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-50"
                             >
-                              Cancel
+                              <X className="h-4 w-4" aria-hidden="true" />
                             </button>
                           </>
                         ) : (
@@ -976,29 +1137,39 @@ export default function AdminDashboardEnhanced() {
                               type="button"
                               disabled={Boolean(savingUserId)}
                               onClick={() => beginEditUser(account)}
-                              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                              aria-label={`Edit ${account.full_name}`}
+                              title="Edit user"
+                              className="rounded-md border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                             >
-                              Edit
+                              <Pencil className="h-4 w-4" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
                               disabled={Boolean(savingUserId) || isCurrentAdmin}
                               onClick={() => deleteUser(account)}
-                              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                              aria-label={`Delete ${account.full_name}`}
+                              title="Delete user"
+                              className="rounded-md border border-red-200 bg-red-50 p-2 text-red-700 hover:bg-red-100 disabled:opacity-50"
                             >
-                              Delete
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
                               disabled={Boolean(savingUserId) || isCurrentAdmin}
                               onClick={() => toggleUserStatus(account)}
-                              className={`rounded-md px-3 py-2 text-xs font-semibold disabled:opacity-50 ${
+                              aria-label={`${account.is_active ? "Deactivate" : "Activate"} ${account.full_name}`}
+                              title={account.is_active ? "Deactivate user" : "Activate user"}
+                              className={`rounded-md p-2 disabled:opacity-50 ${
                                 account.is_active
                                   ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
                                   : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                               }`}
                             >
-                              {account.is_active ? "Deactivate" : "Activate"}
+                              {account.is_active ? (
+                                <UserX className="h-4 w-4" aria-hidden="true" />
+                              ) : (
+                                <UserCheck className="h-4 w-4" aria-hidden="true" />
+                              )}
                             </button>
                           </>
                         )}

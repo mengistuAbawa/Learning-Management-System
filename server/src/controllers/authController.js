@@ -26,6 +26,7 @@ function publicUser(user) {
     avatar_url: user.avatar_url,
     bio: user.bio,
     is_active: user.is_active,
+    approval_status: user.approval_status,
     created_at: user.created_at,
   };
 }
@@ -53,20 +54,19 @@ async function register(req, res) {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
     const result = await pool.query(
-      `INSERT INTO users (full_name, email, password_hash, role)
-       VALUES ($1, $2, $3, 'student')
+      `INSERT INTO users
+         (full_name, email, password_hash, role, approval_status)
+       VALUES ($1, $2, $3, 'student', 'pending')
        RETURNING id, full_name, email, role, avatar_url,
-                 bio, is_active, created_at`,
+                 bio, is_active, approval_status, created_at`,
       [fullName, email, passwordHash]
     );
 
     const user = result.rows[0];
-    const token = createToken(user);
 
     return res.status(201).json({
       success: true,
-      message: "Registration successful.",
-      token,
+      message: "Registration submitted. You can sign in after an administrator approves your account.",
       user: publicUser(user),
     });
   } catch (error) {
@@ -96,7 +96,7 @@ async function createInstructor(req, res) {
       `INSERT INTO users (full_name, email, password_hash, role)
        VALUES ($1, $2, $3, 'instructor')
        RETURNING id, full_name, email, role, avatar_url,
-                 bio, is_active, created_at`,
+                 bio, is_active, approval_status, created_at`,
       [fullName, email, passwordHash]
     );
 
@@ -129,7 +129,7 @@ async function login(req, res) {
 
     const result = await pool.query(
       `SELECT id, full_name, email, password_hash, role,
-              avatar_url, bio, is_active, created_at
+              avatar_url, bio, is_active, approval_status, created_at
        FROM users
        WHERE email = $1
        LIMIT 1`,
@@ -162,6 +162,16 @@ async function login(req, res) {
       return res.status(403).json({
         success: false,
         message: "This account is inactive. Contact an administrator.",
+      });
+    }
+
+    if (user.role === "student" && user.approval_status !== "approved") {
+      return res.status(403).json({
+        success: false,
+        message:
+          user.approval_status === "rejected"
+            ? "Your student registration was not approved. Contact an administrator."
+            : "Your student registration is awaiting administrator approval.",
       });
     }
 

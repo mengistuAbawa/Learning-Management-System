@@ -1163,7 +1163,12 @@ async function getAdminAnalytics() {
   const summaryResult = await pool.query(`
     SELECT
       (SELECT COUNT(*)::int FROM users) AS total_users,
-      (SELECT COUNT(*)::int FROM users WHERE role = 'student') AS total_students,
+      (SELECT COUNT(*)::int FROM users
+        WHERE role = 'student' AND approval_status = 'approved') AS total_students,
+      (SELECT COUNT(*)::int FROM users
+        WHERE role = 'student' AND approval_status = 'approved' AND is_active = TRUE) AS active_students,
+      (SELECT COUNT(*)::int FROM users
+        WHERE role = 'student' AND approval_status = 'pending') AS pending_student_registrations,
       (SELECT COUNT(*)::int FROM users WHERE role = 'instructor') AS total_instructors,
       (SELECT COUNT(*)::int FROM users WHERE role = 'admin') AS total_administrators,
       (SELECT COUNT(*)::int FROM users WHERE is_active = TRUE) AS active_users,

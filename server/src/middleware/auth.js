@@ -50,7 +50,7 @@ async function authenticate(req, res, next) {
 
     const result = await pool.query(
       `SELECT id, full_name, email, role, avatar_url,
-              bio, is_active, created_at
+              bio, is_active, approval_status, created_at
        FROM users
        WHERE id = $1
        LIMIT 1`,
@@ -63,6 +63,16 @@ async function authenticate(req, res, next) {
       return res.status(401).json({
         success: false,
         message: "Account is unavailable. Please log in again.",
+      });
+    }
+
+    if (user.role === "student" && user.approval_status !== "approved") {
+      return res.status(403).json({
+        success: false,
+        message:
+          user.approval_status === "rejected"
+            ? "Your student registration was not approved. Contact an administrator."
+            : "Your student registration is awaiting administrator approval.",
       });
     }
 

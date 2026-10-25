@@ -97,6 +97,20 @@ router.patch(
   ...validateId,
   controller.publish
 );
+router.put(
+  "/:id",
+  authenticate,
+  authorize("instructor"),
+  ...validateId,
+  controller.update
+);
+router.delete(
+  "/:id",
+  authenticate,
+  authorize("instructor"),
+  ...validateId,
+  controller.remove
+);
 router.get("/:id/stream", ...validateId, controller.stream);
 
 module.exports = router;

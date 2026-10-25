@@ -64,6 +64,16 @@ router.post(
   validateRequest,
   controller.createStudent
 );
+router.get("/students/pending", controller.getPendingStudents);
+router.patch(
+  "/students/:id/approval",
+  validateId,
+  body("approval_status")
+    .isIn(["approved", "rejected"])
+    .withMessage("approval_status must be approved or rejected."),
+  validateRequest,
+  controller.updateStudentApproval
+);
 router.get("/recent", controller.getRecentUsers);
 router.patch(
   "/:id",

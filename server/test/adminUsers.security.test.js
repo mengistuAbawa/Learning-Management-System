@@ -123,18 +123,101 @@ test("administrator user-management endpoints enforce permissions and persist ch
     assert.equal(managed.body.user.role, "student");
     createdStudentIds.push(managed.body.user.id);
 
+    const publicEmail = `self-registered-${Date.now()}@example.invalid`;
     const publicRegistration = await request("/auth/register", {
       method: "POST",
       body: {
         full_name: "Self Registered Student",
-        email: `self-registered-${Date.now()}@example.invalid`,
+        email: publicEmail,
         password: "StrongPass1!",
         role: "instructor",
       },
     });
     assert.equal(publicRegistration.status, 201);
     assert.equal(publicRegistration.body.user.role, "student");
+    assert.equal(publicRegistration.body.user.approval_status, "pending");
+    assert.equal("token" in publicRegistration.body, false);
     createdStudentIds.push(publicRegistration.body.user.id);
+
+    const pendingLogin = await request("/auth/login", {
+      method: "POST",
+      body: {
+        email: publicEmail,
+        password: "StrongPass1!",
+      },
+    });
+    assert.equal(pendingLogin.status, 403);
+
+    const pendingStudents = await request("/users/students/pending", {
+      token: adminToken,
+    });
+    assert.equal(pendingStudents.status, 200);
+    assert.ok(
+      pendingStudents.body.students.some(
+        (student) => String(student.id) === String(publicRegistration.body.user.id)
+      )
+    );
+
+    const forbiddenReview = await request(
+      `/users/students/${publicRegistration.body.user.id}/approval`,
+      {
+        token: studentToken,
+        method: "PATCH",
+        body: { approval_status: "approved" },
+      }
+    );
+    assert.equal(forbiddenReview.status, 403);
+
+    const approved = await request(
+      `/users/students/${publicRegistration.body.user.id}/approval`,
+      {
+        token: adminToken,
+        method: "PATCH",
+        body: { approval_status: "approved" },
+      }
+    );
+    assert.equal(approved.status, 200);
+    assert.equal(approved.body.user.approval_status, "approved");
+
+    const approvedLogin = await request("/auth/login", {
+      method: "POST",
+      body: {
+        email: publicEmail,
+        password: "StrongPass1!",
+      },
+    });
+    assert.equal(approvedLogin.status, 200);
+    assert.equal(approvedLogin.body.user.approval_status, "approved");
+
+    const rejectedEmail = `rejected-student-${Date.now()}@example.invalid`;
+    const rejectedRegistration = await request("/auth/register", {
+      method: "POST",
+      body: {
+        full_name: "Rejected Student",
+        email: rejectedEmail,
+        password: "StrongPass1!",
+      },
+    });
+    assert.equal(rejectedRegistration.status, 201);
+    createdStudentIds.push(rejectedRegistration.body.user.id);
+
+    const rejected = await request(
+      `/users/students/${rejectedRegistration.body.user.id}/approval`,
+      {
+        token: adminToken,
+        method: "PATCH",
+        body: { approval_status: "rejected" },
+      }
+    );
+    assert.equal(rejected.status, 200);
+    assert.equal(rejected.body.user.approval_status, "rejected");
+
+    const rejectedLogin = await request("/auth/login", {
+      method: "POST",
+      body: { email: rejectedEmail, password: "StrongPass1!" },
+    });
+    assert.equal(rejectedLogin.status, 403);
+    assert.match(rejectedLogin.body.message, /not approved/i);
 
     const publicInstructorCreation = await request("/auth/instructors", {
       method: "POST",

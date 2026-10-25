@@ -6,6 +6,14 @@ export async function enrollInCourse(courseId) {
   return response.data;
 }
 
+export async function enrollStudentInCourse(courseId, studentEmail) {
+  const response = await api.post(
+    `/enrollments/courses/${courseId}/students`,
+    { student_email: studentEmail }
+  );
+  return response.data;
+}
+
 export async function getMyEnrollments() {
   const response = await api.get("/enrollments/my");
   return response.data;
@@ -22,4 +30,3 @@ export async function updateEnrollmentStatus(id, status) {
   });
   return response.data;
 }
-

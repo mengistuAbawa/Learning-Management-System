@@ -112,6 +112,116 @@ async function enrollInCourse(req, res, next) {
   }
 }
 
+async function enrollStudentAsAdmin(req, res, next) {
+  const { courseId } = req.params;
+  const email =
+    typeof req.body.student_email === "string"
+      ? req.body.student_email.trim().toLowerCase()
+      : "";
+
+  if (!validId(courseId)) {
+    return errorResponse(res, 400, "Invalid course ID.");
+  }
+
+  if (req.user?.role !== "admin") {
+    return errorResponse(res, 403, "Only administrators can enroll another student.");
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
+    return errorResponse(res, 400, "Enter a valid student email address.");
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const courseResult = await client.query(
+      `SELECT id, title, status
+       FROM courses
+       WHERE id = $1
+       FOR SHARE`,
+      [courseId],
+    );
+    const course = courseResult.rows[0];
+
+    if (!course) {
+      await client.query("ROLLBACK");
+      return errorResponse(res, 404, "Course not found.");
+    }
+
+    if (course.status !== "published") {
+      await client.query("ROLLBACK");
+      return errorResponse(res, 400, "Students can enroll only in published courses.");
+    }
+
+    const studentResult = await client.query(
+      `SELECT id, full_name, email, is_active, approval_status
+       FROM users
+       WHERE LOWER(email) = $1 AND role = 'student'
+       FOR SHARE`,
+      [email],
+    );
+    const student = studentResult.rows[0];
+
+    if (!student) {
+      await client.query("ROLLBACK");
+      return errorResponse(res, 404, "Approved student account not found.");
+    }
+
+    if (!student.is_active || student.approval_status !== "approved") {
+      await client.query("ROLLBACK");
+      return errorResponse(
+        res,
+        403,
+        "Only approved, active students can be enrolled.",
+      );
+    }
+
+    const enrollmentResult = await client.query(
+      `INSERT INTO enrollments (student_id, course_id, status)
+       VALUES ($1, $2, 'active')
+       ON CONFLICT (student_id, course_id)
+       DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP
+       WHERE enrollments.status = 'cancelled'
+       RETURNING id, student_id, course_id, status, created_at, updated_at`,
+      [student.id, courseId],
+    );
+
+    if (!enrollmentResult.rowCount) {
+      await client.query("ROLLBACK");
+      return errorResponse(res, 409, "This student is already enrolled in the course.");
+    }
+
+    await client.query(
+      `INSERT INTO notifications (user_id, type, title, message, link_url)
+       VALUES ($1, 'enrollment_approved', 'Course enrollment', $2, $3)`,
+      [
+        student.id,
+        `An administrator enrolled you in "${course.title}".`,
+        `/courses/${courseId}/learn`,
+      ],
+    );
+
+    await client.query("COMMIT");
+
+    return res.status(201).json({
+      success: true,
+      message: "Student enrolled successfully.",
+      data: {
+        ...enrollmentResult.rows[0],
+        student_name: student.full_name,
+        student_email: student.email,
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    return next(error);
+  } finally {
+    client.release();
+  }
+}
+
 // GET /api/enrollments/my
 async function getMyEnrollments(req, res, next) {
   if (req.user?.role !== "student") {
@@ -321,6 +431,7 @@ async function updateEnrollmentStatus(req, res, next) {
 
 module.exports = {
   enrollInCourse,
+  enrollStudentAsAdmin,
   getMyEnrollments,
   getCourseEnrollments,
   updateEnrollmentStatus,

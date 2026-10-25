@@ -397,4 +397,95 @@ test("course video recording and playback enforce ownership and enrollment", asy
       401
     );
   });
+
+  await t.test("only the course instructor can update video details and visibility", async () => {
+    const forbidden = await request(`/course-videos/${videoId}`, {
+      token: signedToken(otherInstructorId),
+      method: "PUT",
+      body: { title: "Not yours", status: "draft" },
+    });
+    assert.equal(forbidden.status, 404);
+
+    const studentForbidden = await request(`/course-videos/${videoId}`, {
+      token: signedToken(studentId),
+      method: "PUT",
+      body: { title: "Not allowed", status: "draft" },
+    });
+    assert.equal(studentForbidden.status, 403);
+
+    const updated = await request(`/course-videos/${videoId}`, {
+      token: signedToken(instructorId),
+      method: "PUT",
+      body: { title: "Updated lesson", status: "draft" },
+    });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.body.video.title, "Updated lesson");
+    assert.equal(updated.body.video.status, "draft");
+
+    const hiddenFromStudent = await request("/course-videos", {
+      token: signedToken(studentId),
+    });
+    assert.ok(
+      !hiddenFromStudent.body.videos.some(
+        (video) => String(video.id) === String(videoId)
+      )
+    );
+
+    const invalid = await request(`/course-videos/${videoId}`, {
+      token: signedToken(instructorId),
+      method: "PUT",
+      body: { title: "", status: "invalid" },
+    });
+    assert.equal(invalid.status, 400);
+  });
+
+  await t.test("instructor can republish and permanently delete their video", async () => {
+    const published = await request(`/course-videos/${videoId}`, {
+      token: signedToken(instructorId),
+      method: "PUT",
+      body: { title: "Updated lesson", status: "published" },
+    });
+    assert.equal(published.status, 200);
+    assert.equal(published.body.video.status, "published");
+
+    const forbidden = await request(`/course-videos/${videoId}`, {
+      token: signedToken(otherInstructorId),
+      method: "DELETE",
+    });
+    assert.equal(forbidden.status, 404);
+
+    const studentForbidden = await request(`/course-videos/${videoId}`, {
+      token: signedToken(studentId),
+      method: "DELETE",
+    });
+    assert.equal(studentForbidden.status, 403);
+
+    const storedVideo = await pool.query(
+      "SELECT storage_key, media_type FROM course_videos WHERE id = $1",
+      [videoId]
+    );
+    const videoExtension = {
+      "video/webm": ".webm",
+      "video/mp4": ".mp4",
+      "video/ogg": ".ogv",
+    }[storedVideo.rows[0].media_type];
+    const videoFile = path.join(
+      __dirname,
+      "..",
+      "storage",
+      "course-videos",
+      `${storedVideo.rows[0].storage_key}${videoExtension}`
+    );
+    const deleted = await request(`/course-videos/${videoId}`, {
+      token: signedToken(instructorId),
+      method: "DELETE",
+    });
+    assert.equal(deleted.status, 200);
+    assert.equal(
+      (await pool.query("SELECT 1 FROM course_videos WHERE id = $1", [videoId]))
+        .rowCount,
+      0
+    );
+    await assert.rejects(fs.stat(videoFile), { code: "ENOENT" });
+  });
 });

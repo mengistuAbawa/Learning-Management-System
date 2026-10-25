@@ -194,6 +194,106 @@ async function publish(req, res, next) {
   }
 }
 
+async function update(req, res, next) {
+  const title =
+    typeof req.body.title === "string" ? req.body.title.trim() : "";
+  const status = req.body.status;
+  if (!title || title.length > 200) {
+    return sendError(res, 400, "Video title must contain 1–200 characters.");
+  }
+  if (!["draft", "published"].includes(status)) {
+    return sendError(res, 400, "Video status must be draft or published.");
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE course_videos
+       SET title = $1, status = $2
+       WHERE id = $3 AND instructor_id = $4
+       RETURNING id, course_id, title, status, media_type, file_size, created_at`,
+      [title, status, req.params.id, req.user.id]
+    );
+    if (!result.rowCount) {
+      return sendError(res, 404, "Video not found in your courses.");
+    }
+    return res.json({ success: true, video: result.rows[0] });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function remove(req, res, next) {
+  const client = await pool.connect();
+  let transactionOpen = false;
+  let transactionCommitted = false;
+  let originalFilePath;
+  let quarantinedFilePath;
+
+  try {
+    await client.query("BEGIN");
+    transactionOpen = true;
+    const result = await client.query(
+      `SELECT storage_key, media_type
+       FROM course_videos
+       WHERE id = $1 AND instructor_id = $2
+       FOR UPDATE`,
+      [req.params.id, req.user.id]
+    );
+    const video = result.rows[0];
+    if (!video) {
+      await client.query("ROLLBACK");
+      transactionOpen = false;
+      return sendError(res, 404, "Video not found in your courses.");
+    }
+
+    const extension = videoExtensions[video.media_type];
+    if (!extension) {
+      throw new Error("Cannot safely remove a video with an unsupported media type.");
+    }
+    originalFilePath = path.join(
+      videoDirectory,
+      `${video.storage_key}${extension}`
+    );
+    quarantinedFilePath = path.join(
+      videoDirectory,
+      `.${path.basename(originalFilePath)}.${crypto.randomUUID()}.deleting`
+    );
+    try {
+      await fsp.rename(originalFilePath, quarantinedFilePath);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      quarantinedFilePath = null;
+    }
+
+    await client.query(
+      "DELETE FROM course_videos WHERE id = $1 AND instructor_id = $2",
+      [req.params.id, req.user.id]
+    );
+    await client.query("COMMIT");
+    transactionOpen = false;
+    transactionCommitted = true;
+
+    if (quarantinedFilePath) await fsp.unlink(quarantinedFilePath);
+    return res.json({ success: true, message: "Video deleted." });
+  } catch (error) {
+    if (transactionOpen) {
+      await client.query("ROLLBACK").catch((rollbackError) => {
+        console.error("Course video delete rollback failed:", rollbackError.message);
+      });
+    }
+    if (!transactionCommitted && quarantinedFilePath && originalFilePath) {
+      await fsp.rename(quarantinedFilePath, originalFilePath).catch((restoreError) => {
+        if (restoreError.code !== "ENOENT") {
+          console.error("Course video file restore failed:", restoreError.message);
+        }
+      });
+    }
+    next(error);
+  } finally {
+    client.release();
+  }
+}
+
 async function createPlaybackLink(req, res, next) {
   try {
     const video = await getVideoAccess(req.user.id, req.params.id);
@@ -318,6 +418,8 @@ module.exports = {
   list,
   create,
   publish,
+  update,
+  remove,
   createPlaybackLink,
   stream,
   uploadDirectory,

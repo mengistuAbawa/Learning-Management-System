@@ -12,6 +12,8 @@ CREATE TABLE users (
     avatar_url TEXT,
     bio TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    approval_status VARCHAR(20) NOT NULL DEFAULT 'approved'
+        CHECK (approval_status IN ('pending', 'approved', 'rejected')),
     email_verified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -257,5 +259,8 @@ CREATE INDEX idx_submissions_student ON assignment_submissions(student_id);
 CREATE INDEX idx_notifications_unread
     ON notifications(user_id, created_at DESC)
     WHERE is_read = FALSE;
+CREATE INDEX idx_users_pending_students
+    ON users (created_at DESC, id DESC)
+    WHERE role = 'student' AND approval_status = 'pending';
 
 COMMIT;

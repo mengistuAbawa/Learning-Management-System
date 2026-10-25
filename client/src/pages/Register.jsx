@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import {
   AlertCircle,
   ArrowRight,
@@ -29,7 +29,6 @@ function getErrorMessage(error) {
 
 export default function Register() {
   const { register, isAuthenticated, loading } = useAuth();
-  const navigate = useNavigate();
 
   const [form, setForm] = useState({
     full_name: "",
@@ -40,6 +39,7 @@ export default function Register() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [registered, setRegistered] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return null;
@@ -93,8 +93,7 @@ export default function Register() {
         email,
         password: form.password,
       });
-
-      navigate("/dashboard", { replace: true });
+      setRegistered(true);
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -111,7 +110,26 @@ export default function Register() {
 
   return (
     <AuthLayout mode="register">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {registered ? (
+        <div className="space-y-5 text-center" role="status">
+          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
+          <div>
+            <h1 className="text-xl font-semibold text-white">Registration submitted</h1>
+            <p className="mt-2 text-sm text-slate-300">
+              Your account is waiting for administrator approval. You can sign in once it has been approved.
+            </p>
+          </div>
+          <Link
+            to="/login"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-500 px-5 py-3 font-semibold text-white transition hover:bg-indigo-400"
+          >
+            Continue to sign in
+            <ArrowRight className="h-5 w-5" />
+          </Link>
+        </div>
+      ) : (
+        <>
+          <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div
             role="alert"
@@ -268,14 +286,16 @@ export default function Register() {
             </>
           )}
         </button>
-      </form>
+          </form>
 
-      <p className="mt-7 text-center text-sm text-slate-400">
-        Already have an account?{" "}
-        <Link to="/login" className="font-semibold text-indigo-300 hover:text-indigo-200">
-          Sign in
-        </Link>
-      </p>
+          <p className="mt-7 text-center text-sm text-slate-400">
+            Already have an account?{" "}
+            <Link to="/login" className="font-semibold text-indigo-300 hover:text-indigo-200">
+              Sign in
+            </Link>
+          </p>
+        </>
+      )}
     </AuthLayout>
   );
 }

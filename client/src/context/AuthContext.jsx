@@ -82,12 +82,7 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async (details) => {
     const response = await api.post("/auth/register", details);
-    const { token, user: registeredUser } = response.data;
-
-    sessionStorage.setItem("learnsphere_token", token);
-    setUser(registeredUser);
-
-    return registeredUser;
+    return response.data.user;
   }, []);
 
   const logout = useCallback(() => {

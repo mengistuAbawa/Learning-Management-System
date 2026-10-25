@@ -26,9 +26,31 @@ export async function startQuizAttempt(quizId) {
 }
 
 export async function submitQuizAttempt(attemptId, answers) {
-  const response = await api.post(`/quiz-attempts/${attemptId}/submit`, {
-    answers,
-  });
+  const response = await api.post(
+    `/quiz-attempts/${attemptId}/submit`,
+    answers === undefined ? {} : { answers }
+  );
+  return response.data;
+}
+
+export async function getQuizAttempt(attemptId) {
+  const response = await api.get(`/quiz-attempts/${attemptId}`);
+  return response.data;
+}
+
+export async function saveQuizAnswer(attemptId, questionId, answer) {
+  const response = await api.put(
+    `/quiz-attempts/${attemptId}/answers/${questionId}`,
+    answer
+  );
+  return response.data;
+}
+
+export async function updateQuizQuestionFlags(attemptId, questionId, flags) {
+  const response = await api.put(
+    `/quiz-attempts/${attemptId}/questions/${questionId}/flags`,
+    flags
+  );
   return response.data;
 }
 

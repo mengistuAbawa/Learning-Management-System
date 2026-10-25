@@ -14,7 +14,7 @@ async function createStudent(req, res, next) {
       `INSERT INTO users (full_name, email, password_hash, role)
        VALUES ($1, $2, $3, 'student')
        RETURNING id, full_name, email, role, avatar_url,
-                 bio, is_active, created_at`,
+                 bio, is_active, approval_status, created_at`,
       [
         req.body.full_name.trim(),
         req.body.email.trim().toLowerCase(),
@@ -38,7 +38,7 @@ async function createStudent(req, res, next) {
 async function getRecentUsers(req, res, next) {
   try {
     const result = await pool.query(
-      `SELECT id, full_name, email, role, is_active, created_at
+      `SELECT id, full_name, email, role, is_active, approval_status, created_at
        FROM users
        ORDER BY created_at DESC, id DESC
        LIMIT 8`
@@ -49,13 +49,91 @@ async function getRecentUsers(req, res, next) {
   }
 }
 
+async function getPendingStudents(req, res, next) {
+  try {
+    const result = await pool.query(
+      `SELECT id, full_name, email, created_at
+       FROM users
+       WHERE role = 'student' AND approval_status = 'pending'
+       ORDER BY created_at ASC, id ASC`
+    );
+
+    return res.json({ success: true, students: result.rows });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function updateStudentApproval(req, res, next) {
+  const { approval_status: approvalStatus } = req.body;
+  let client;
+
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+
+    const target = await client.query(
+      `SELECT id, full_name, role, approval_status
+       FROM users
+       WHERE id = $1
+       FOR UPDATE`,
+      [req.params.id]
+    );
+
+    if (!target.rowCount || target.rows[0].role !== "student") {
+      await client.query("ROLLBACK");
+      return sendError(res, 404, "Pending student registration not found.");
+    }
+
+    if (target.rows[0].approval_status !== "pending") {
+      await client.query("ROLLBACK");
+      return sendError(res, 409, "This student registration has already been reviewed.");
+    }
+
+    const result = await client.query(
+      `UPDATE users
+       SET approval_status = $2, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, full_name, email, role, is_active, approval_status, created_at`,
+      [req.params.id, approvalStatus]
+    );
+
+    const approved = approvalStatus === "approved";
+    await client.query(
+      `INSERT INTO notifications (user_id, type, title, message, link_url)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        req.params.id,
+        approved ? "registration_approved" : "registration_rejected",
+        approved ? "Registration approved" : "Registration not approved",
+        approved
+          ? "Your student account is approved. You can now sign in and browse courses."
+          : "Your student registration was not approved. Contact an administrator for more information.",
+        approved ? "/dashboard" : "/login",
+      ]
+    );
+
+    await client.query("COMMIT");
+    return res.json({
+      success: true,
+      user: result.rows[0],
+      message: approved ? "Student registration approved." : "Student registration rejected.",
+    });
+  } catch (error) {
+    if (client) await client.query("ROLLBACK");
+    return next(error);
+  } finally {
+    if (client) client.release();
+  }
+}
+
 async function updateUser(req, res, next) {
   try {
     const result = await pool.query(
       `UPDATE users
        SET full_name = $2, email = $3, updated_at = NOW()
        WHERE id = $1
-       RETURNING id, full_name, email, role, is_active, created_at`,
+       RETURNING id, full_name, email, role, is_active, approval_status, created_at`,
       [req.params.id, req.body.full_name, req.body.email]
     );
     if (!result.rowCount) return sendError(res, 404, "User not found.");
@@ -109,7 +187,7 @@ async function updateUserStatus(req, res, next) {
       `UPDATE users
        SET is_active = $2, updated_at = NOW()
        WHERE id = $1
-       RETURNING id, full_name, email, role, is_active, created_at`,
+       RETURNING id, full_name, email, role, is_active, approval_status, created_at`,
       [req.params.id, isActive]
     );
     await client.query("COMMIT");
@@ -174,6 +252,8 @@ async function deleteUser(req, res, next) {
 module.exports = {
   createStudent,
   getRecentUsers,
+  getPendingStudents,
+  updateStudentApproval,
   updateUser,
   updateUserStatus,
   deleteUser,

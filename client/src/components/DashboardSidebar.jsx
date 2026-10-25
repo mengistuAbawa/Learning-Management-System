@@ -3,6 +3,7 @@ import {
   Bell,
   BookOpen,
   CalendarDays,
+  ClipboardCheck,
   LayoutDashboard,
   Users,
 } from "lucide-react";
@@ -18,6 +19,7 @@ const dashboardNavigation = {
       { label: "Live classes", to: "/live-classes", icon: CalendarDays },
       { label: "Notifications", to: "/notifications", icon: Bell },
       { label: "Analytics", to: "/analytics", icon: Activity },
+      { label: "Grade essays", to: "/instructor/quizzes/grading", icon: ClipboardCheck },
     ],
   },
   instructor: {
@@ -27,6 +29,7 @@ const dashboardNavigation = {
       { label: "Courses", to: "/courses", icon: BookOpen },
       { label: "Live classes", to: "/live-classes", icon: CalendarDays },
       { label: "Analytics", to: "/analytics", icon: Activity },
+      { label: "Grade essays", to: "/instructor/quizzes/grading", icon: ClipboardCheck },
       { label: "Notifications", to: "/notifications", icon: Bell },
     ],
   },

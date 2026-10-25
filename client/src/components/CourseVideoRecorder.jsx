@@ -3,9 +3,13 @@ import {
   Camera,
   ChevronDown,
   CircleStop,
+  Pencil,
   Pause,
   Play,
+  Save,
+  Trash2,
   Video,
+  X,
 } from "lucide-react";
 import api from "../services/api";
 
@@ -51,6 +55,10 @@ export default function CourseVideoRecorder({ courses }) {
   const [message, setMessage] = useState("");
   const [videos, setVideos] = useState([]);
   const [playing, setPlaying] = useState({});
+  const [editingVideoId, setEditingVideoId] = useState(null);
+  const [videoEdit, setVideoEdit] = useState({ title: "", status: "draft" });
+  const [savingVideoId, setSavingVideoId] = useState(null);
+  const [deletingVideoId, setDeletingVideoId] = useState(null);
   const selectedCourse = courses.find(
     (course) => String(course.id) === String(courseId)
   );
@@ -317,6 +325,56 @@ export default function CourseVideoRecorder({ courses }) {
     }
   }
 
+  function beginEditVideo(video) {
+    setError("");
+    setEditingVideoId(String(video.id));
+    setVideoEdit({ title: video.title, status: video.status });
+  }
+
+  async function saveVideoChanges(videoId) {
+    setSavingVideoId(String(videoId));
+    setError("");
+    try {
+      await api.put(`/course-videos/${videoId}`, videoEdit);
+      setEditingVideoId(null);
+      setMessage("Video details updated.");
+    } catch (saveError) {
+      setError(saveError.response?.data?.message || "The video could not be updated.");
+      return;
+    } finally {
+      setSavingVideoId(null);
+    }
+    try {
+      await loadVideos();
+    } catch {
+      setError("Video details were updated, but the recordings list could not refresh.");
+    }
+  }
+
+  async function deleteVideo(video) {
+    if (!window.confirm(`Delete "${video.title}"? This cannot be undone.`)) return;
+
+    setDeletingVideoId(String(video.id));
+    setError("");
+    try {
+      await api.delete(`/course-videos/${video.id}`);
+      setVideos((current) =>
+        current.filter((item) => String(item.id) !== String(video.id))
+      );
+      setPlaying((current) => {
+        const next = { ...current };
+        delete next[video.id];
+        return next;
+      });
+      setMessage("Video deleted.");
+      if (String(editingVideoId) === String(video.id)) setEditingVideoId(null);
+    } catch (deleteError) {
+      setError(deleteError.response?.data?.message || "The video could not be deleted.");
+    } finally {
+      setDeletingVideoId(null);
+    }
+  }
+
   async function playVideo(videoId) {
     setError("");
     try {
@@ -558,7 +616,44 @@ export default function CourseVideoRecorder({ courses }) {
                 <li key={video.id} className="rounded-lg border border-slate-200 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-medium text-slate-900">{video.title}</p>
+                      {String(editingVideoId) === String(video.id) ? (
+                        <div className="grid gap-2">
+                          <label className="sr-only" htmlFor={`video-edit-title-${video.id}`}>
+                            Video title
+                          </label>
+                          <input
+                            id={`video-edit-title-${video.id}`}
+                            value={videoEdit.title}
+                            maxLength={200}
+                            onChange={(event) =>
+                              setVideoEdit((current) => ({
+                                ...current,
+                                title: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          />
+                          <label className="sr-only" htmlFor={`video-edit-status-${video.id}`}>
+                            Video visibility
+                          </label>
+                          <select
+                            id={`video-edit-status-${video.id}`}
+                            value={videoEdit.status}
+                            onChange={(event) =>
+                              setVideoEdit((current) => ({
+                                ...current,
+                                status: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          >
+                            <option value="draft">Draft — instructor only</option>
+                            <option value="published">Published to enrolled students</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <p className="font-medium text-slate-900">{video.title}</p>
+                      )}
                       <p className="text-sm text-slate-600">{video.course_title}</p>
                       <p
                         className={`mt-1 text-xs font-semibold ${
@@ -569,6 +664,41 @@ export default function CourseVideoRecorder({ courses }) {
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                      {String(editingVideoId) === String(video.id) ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => saveVideoChanges(video.id)}
+                            disabled={
+                              savingVideoId !== null ||
+                              !videoEdit.title.trim() ||
+                              deletingVideoId !== null
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                          >
+                            <Save className="h-4 w-4" />
+                            {savingVideoId === String(video.id) ? "Saving…" : "Save"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingVideoId(null)}
+                            disabled={savingVideoId !== null}
+                            aria-label="Cancel editing video"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            <X className="h-4 w-4" /> Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => beginEditVideo(video)}
+                          disabled={savingVideoId !== null || deletingVideoId !== null}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+                        >
+                          <Pencil className="h-4 w-4" /> Edit
+                        </button>
+                      )}
                       {video.status === "draft" && (
                         <button
                           type="button"
@@ -578,6 +708,16 @@ export default function CourseVideoRecorder({ courses }) {
                           Send
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => deleteVideo(video)}
+                        disabled={deletingVideoId !== null || savingVideoId !== null}
+                        aria-label={`Delete ${video.title}`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {deletingVideoId === String(video.id) ? "Deleting…" : "Delete"}
+                      </button>
                       {!playing[video.id] && (
                         <button
                           type="button"

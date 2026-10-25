@@ -254,6 +254,7 @@ test("analytics endpoint enforces authentication and role-scoped data access", a
 
     assert.equal(response.status, 201);
     assert.equal(result.user.role, "student");
+    assert.equal(result.user.approval_status, "pending");
     assert.equal(Object.hasOwn(result.user, "password_hash"), false);
     registeredStudentId = result.user.id;
   });
@@ -339,6 +340,7 @@ test("analytics endpoint enforces authentication and role-scoped data access", a
     assert.equal(result.status, 200);
     assert.equal(result.body.analytics.role, "admin");
     assert.ok(result.body.analytics.summary.total_users >= 5);
+    assert.ok(result.body.analytics.summary.pending_student_registrations >= 1);
     assert.ok(result.body.analytics.summary.total_courses >= 2);
     assert.ok(result.body.analytics.summary.total_enrollments >= 2);
     assert.ok(result.body.analytics.summary.total_submissions >= 2);
