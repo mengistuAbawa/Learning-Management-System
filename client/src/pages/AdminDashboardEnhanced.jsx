@@ -610,7 +610,7 @@ export default function AdminDashboardEnhanced() {
     >
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-8 sm:py-4">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
@@ -619,25 +619,29 @@ export default function AdminDashboardEnhanced() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <Link to="/admin-dashboard" className="flex items-center gap-3">
+          <Link
+            to="/admin-dashboard"
+            aria-label={settingsDraft.platform_name || "LearnSphere LMS"}
+            className="flex shrink-0 items-center gap-2 sm:gap-3"
+          >
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-600 to-amber-700">
               <ShieldAlert className="h-5 w-5 text-white" />
             </div>
-            <span className="text-lg font-bold text-slate-900">
+            <span className="hidden text-lg font-bold text-slate-900 sm:inline">
               {settingsDraft.platform_name || "LearnSphere LMS"}
             </span>
           </Link>
 
-          <div className="flex items-center gap-4">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-4">
             <Link
               to="/courses"
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50"
+              className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50 lg:inline-flex"
             >
               Courses
             </Link>
             <Link
               to="/live-classes"
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50"
+              className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50 lg:inline-flex"
             >
               Live classes
             </Link>
@@ -648,11 +652,11 @@ export default function AdminDashboardEnhanced() {
                 setStudentSuccess("");
                 setShowStudentForm(true);
               }}
+              aria-label="Add student"
               className="inline-flex items-center gap-2 rounded-lg border border-amber-600 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50"
             >
               <UserPlus className="h-4 w-4" />
               <span className="hidden sm:inline">Add Student</span>
-              <span className="sm:hidden">Student</span>
             </button>
             <button
               type="button"
@@ -661,11 +665,11 @@ export default function AdminDashboardEnhanced() {
                 setInstructorSuccess("");
                 setShowInstructorForm(true);
               }}
+              aria-label="Add instructor"
               className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-500"
             >
               <UserPlus className="h-4 w-4" />
               <span className="hidden sm:inline">Add Instructor</span>
-              <span className="sm:hidden">Add</span>
             </button>
             <Link
               to="/notifications"

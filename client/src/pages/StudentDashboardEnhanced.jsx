@@ -353,7 +353,7 @@ export default function StudentDashboardEnhanced() {
 
         <div className="min-w-0 flex-1">
           <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
-            <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
+            <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-6">
               <button
                 type="button"
                 onClick={() => setMobileOpen(true)}
@@ -367,9 +367,9 @@ export default function StudentDashboardEnhanced() {
                 className="flex items-center gap-2 font-bold text-slate-900 dark:text-white"
               >
                 <BookOpen className="h-5 w-5 text-indigo-600" />
-                Student workspace
+                <span className="hidden text-sm sm:inline">Student workspace</span>
               </Link>
-              <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
                 <button
                   type="button"
                   onClick={() => void loadDashboard()}

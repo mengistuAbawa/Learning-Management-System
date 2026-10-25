@@ -211,7 +211,7 @@ export default function InstructorDashboardEnhanced() {
     >
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-8 sm:py-4">
           <button
             type="button"
             className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
@@ -225,7 +225,7 @@ export default function InstructorDashboardEnhanced() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-cyan-700">
               <BookOpen className="h-5 w-5 text-white" />
             </div>
-            <span className="text-lg font-bold text-slate-900">
+            <span className="hidden text-lg font-bold text-slate-900 sm:inline">
               Instructor Portal
             </span>
           </Link>
@@ -244,10 +244,10 @@ export default function InstructorDashboardEnhanced() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-4">
             <Link
               to="/live-classes"
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50"
+              className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50 md:inline-flex"
             >
               Live classes
             </Link>
@@ -258,7 +258,7 @@ export default function InstructorDashboardEnhanced() {
               onToggle={() => setDarkTheme((theme) => !theme)}
             />
 
-            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-gradient-to-br from-cyan-400 to-cyan-600">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-gradient-to-br from-cyan-400 to-cyan-600 sm:flex">
               {user?.avatar_url ? (
                 <img
                   src={user.avatar_url}
