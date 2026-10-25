@@ -45,6 +45,13 @@ export default function Login() {
     event.preventDefault();
     setError("");
 
+    if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
+      setError(
+        "The API URL is not configured. Set VITE_API_URL to your Render API URL in Vercel, then redeploy.",
+      );
+      return;
+    }
+
     if (!form.email.trim() || !form.password) {
       setError("Enter your email address and password.");
       return;
