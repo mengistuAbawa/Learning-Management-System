@@ -183,7 +183,7 @@ export default function DashboardSidebar({
   if (!navigation) return null;
 
   const responsiveClasses = responsive
-    ? `fixed inset-y-0 left-0 z-40 h-screen w-[min(86vw,290px)] transform transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:w-auto lg:translate-x-0 ${
+    ? `fixed inset-y-0 left-0 z-40 h-dvh w-[min(86vw,290px)] transform overscroll-contain transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:w-auto lg:translate-x-0 ${
         mobileOpen ? "translate-x-0" : "-translate-x-full"
       }`
     : "w-full shrink-0 lg:sticky lg:top-24 lg:w-[230px]";
