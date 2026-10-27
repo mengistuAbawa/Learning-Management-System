@@ -872,7 +872,10 @@ export default function AdminDashboardEnhanced() {
                           Enrollments
                         </span>
                       </div>
-                      <div className="mt-4 grid grid-cols-6 gap-3 sm:grid-cols-12">
+                      <div
+                        aria-label="Monthly new users and enrollments bar chart"
+                        className="mt-4 grid grid-cols-6 gap-2 sm:grid-cols-12 sm:gap-3"
+                      >
                         {monthlyTrends.map((month) => {
                           const users = Number(month.new_users) || 0;
                           const enrollments = Number(month.new_enrollments) || 0;
@@ -894,7 +897,7 @@ export default function AdminDashboardEnhanced() {
                               className="flex min-w-0 flex-col items-center"
                               title={`${month.month}: ${users} users, ${enrollments} enrollments`}
                             >
-                              <div className="flex h-32 w-full items-end justify-center gap-1 border-b border-slate-200">
+                              <div className="flex h-28 w-full items-end justify-center gap-0.5 border-b border-slate-200 sm:h-32 sm:gap-1">
                                 <span
                                   className="w-2/5 rounded-t bg-indigo-500"
                                   style={{ height: `${usersHeight}%` }}

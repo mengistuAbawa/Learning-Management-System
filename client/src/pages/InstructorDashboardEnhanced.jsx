@@ -16,6 +16,8 @@ import {
   Menu,
   CalendarDays,
   GraduationCap,
+  Video,
+  X,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -32,12 +34,16 @@ export default function InstructorDashboardEnhanced() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [courses, setCourses] = useState([]);
+  const [liveClasses, setLiveClasses] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [showStudentCoursePicker, setShowStudentCoursePicker] = useState(false);
+  const [showCourseVideoModal, setShowCourseVideoModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [quickActionError, setQuickActionError] = useState("");
+  const [liveClassActionError, setLiveClassActionError] = useState("");
+  const [startingLiveClassId, setStartingLiveClassId] = useState(null);
   const [courseSearch, setCourseSearch] = useState("");
   const [courseStatusFilter, setCourseStatusFilter] = useState("all");
   const [darkTheme, setDarkTheme] = useState(
@@ -58,6 +64,13 @@ export default function InstructorDashboardEnhanced() {
           setCourses(response.data.courses || []);
         } catch {
           setCourses([]);
+        }
+
+        try {
+          const response = await api.get("/live-classes");
+          setLiveClasses(response.data.classes || []);
+        } catch {
+          setLiveClasses([]);
         }
 
         // Load analytics
@@ -97,17 +110,41 @@ export default function InstructorDashboardEnhanced() {
     );
   }, [darkTheme]);
 
+  useEffect(() => {
+    if (!showCourseVideoModal) return undefined;
+    function closeOnEscape(event) {
+      if (event.key === "Escape") setShowCourseVideoModal(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [showCourseVideoModal]);
+
   function handleLogout() {
     logout();
     navigate("/login", { replace: true });
   }
 
+  async function openLiveClass(liveClass) {
+    setLiveClassActionError("");
+    setStartingLiveClassId(String(liveClass.id));
+    try {
+      if (liveClass.status === "scheduled") {
+        await api.post(`/live-classes/${liveClass.id}/start`);
+      }
+      navigate(`/live-classes/${liveClass.id}/room`);
+    } catch (actionError) {
+      setLiveClassActionError(
+        actionError.response?.data?.message ||
+          "The live class could not be opened. Try again from the live classes page."
+      );
+    } finally {
+      setStartingLiveClassId(null);
+    }
+  }
+
   function handleSidebarAction(action) {
     if (action === "video-lessons") {
-      document.getElementById("video-lessons")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      setShowCourseVideoModal(true);
     }
   }
 
@@ -194,6 +231,26 @@ export default function InstructorDashboardEnhanced() {
 
   const summary = analytics?.summary || {};
   const totalStudents = Number(summary.totalStudents) || 0;
+  const instructorLiveClasses = liveClasses
+    .filter(
+      (liveClass) =>
+        liveClass.can_manage && ["scheduled", "live"].includes(liveClass.status)
+    )
+    .sort(
+      (first, second) =>
+        Number(second.status === "live") - Number(first.status === "live") ||
+        new Date(first.scheduled_at) - new Date(second.scheduled_at)
+    )
+    .slice(0, 3);
+  const activityByMonth = analytics?.activityByMonth || [];
+  const maxMonthlyActivity = Math.max(
+    1,
+    ...activityByMonth.map((month) =>
+      Number(month.quiz_attempts || 0) +
+      Number(month.assignment_submissions || 0) +
+      Number(month.assignments_graded || 0)
+    )
+  );
   const visibleCourses = courses.filter((course) => {
     const matchesSearch = course.title
       ?.toLowerCase()
@@ -305,8 +362,6 @@ export default function InstructorDashboardEnhanced() {
           </div>
         )}
 
-        <CourseVideoRecorder courses={courses} />
-
         {/* Welcome & Stats Header */}
         <div className="mb-8">
           <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-cyan-500 to-cyan-600 p-6 text-white shadow-lg">
@@ -321,60 +376,240 @@ export default function InstructorDashboardEnhanced() {
               <PlusCircle className="h-4 w-4" />
               Create New Course
             </Link>
+            <button
+              type="button"
+              onClick={() => setShowCourseVideoModal(true)}
+              className="mt-4 ml-2 inline-flex items-center gap-2 rounded-lg border border-white/40 bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 transition"
+            >
+              <Video className="h-4 w-4" />
+              Course video recordings
+            </button>
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {[
-            {
-              label: "Total Courses",
-              value: summary.totalCourses ?? courses.length,
-              icon: BookOpen,
-              color: "from-blue-100 to-blue-200 text-blue-600",
-            },
-            {
-              label: "Unique Students",
-              value: totalStudents,
-              icon: Users,
-              color: "from-indigo-100 to-indigo-200 text-indigo-600",
-            },
-            {
-              label: "Total Enrollments",
-              value: summary.totalEnrollments ?? 0,
-              icon: GraduationCap,
-              color: "from-violet-100 to-violet-200 text-violet-600",
-            },
-            {
-              label: "Pending Grading",
-              value: summary.pendingGradingTotal ?? pendingSubmissions.length,
-              icon: Clock,
-              color: "from-orange-100 to-orange-200 text-orange-600",
-            },
-            {
-              label: "Upcoming Classes",
-              value: summary.upcomingClasses ?? 0,
-              icon: CalendarDays,
-              color: "from-emerald-100 to-emerald-200 text-emerald-600",
-            },
-          ].map((stat, idx) => {
-            const Icon = stat.icon;
-            return (
-              <div
-                key={idx}
-                className={`rounded-xl border border-slate-200 bg-gradient-to-br ${stat.color} p-6 shadow-sm`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600">
-                      {stat.label}
-                    </p>
-                    <p className="mt-2 text-3xl font-bold">{stat.value}</p>
+            {[
+              {
+                label: "Total Courses",
+                value: summary.totalCourses ?? courses.length,
+                icon: BookOpen,
+                color: "from-blue-100 to-blue-200 text-blue-600",
+              },
+              {
+                label: "Unique Students",
+                value: totalStudents,
+                icon: Users,
+                color: "from-indigo-100 to-indigo-200 text-indigo-600",
+              },
+              {
+                label: "Total Enrollments",
+                value: summary.totalEnrollments ?? 0,
+                icon: GraduationCap,
+                color: "from-violet-100 to-violet-200 text-violet-600",
+              },
+              {
+                label: "Pending Grading",
+                value: summary.pendingGradingTotal ?? pendingSubmissions.length,
+                icon: Clock,
+                color: "from-orange-100 to-orange-200 text-orange-600",
+              },
+              {
+                label: "Upcoming Classes",
+                value: summary.upcomingClasses ?? 0,
+                icon: CalendarDays,
+                color: "from-emerald-100 to-emerald-200 text-emerald-600",
+              },
+            ].map((stat) => {
+              const Icon = stat.icon;
+              return (
+                <div
+                  key={stat.label}
+                  className={`rounded-xl border border-slate-200 bg-gradient-to-br ${stat.color} p-5 shadow-sm sm:p-6`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">
+                        {stat.label}
+                      </p>
+                      <p className="mt-2 text-3xl font-bold">{stat.value}</p>
+                    </div>
+                    <Icon className="h-8 w-8 shrink-0 opacity-50" />
                   </div>
-                  <Icon className="h-8 w-8 opacity-50" />
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
           </div>
         </div>
+
+        <section
+          aria-labelledby="instructor-activity-heading"
+          className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+        >
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2
+                id="instructor-activity-heading"
+                className="font-bold text-slate-900"
+              >
+                Teaching activity
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Quiz attempts, submissions, and grading by month
+              </p>
+            </div>
+            <Link
+              to="/analytics"
+              className="text-sm font-semibold text-cyan-700 hover:text-cyan-800"
+            >
+              View analytics
+            </Link>
+          </div>
+          {activityByMonth.length === 0 ? (
+            <p className="mt-6 text-sm text-slate-500">
+              Monthly teaching activity will appear here as students work.
+            </p>
+          ) : (
+            <>
+              <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-600">
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-cyan-600" />
+                  Quiz attempts
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-amber-500" />
+                  Submissions
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-600" />
+                  Graded
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-6 gap-2 sm:grid-cols-12 sm:gap-3">
+                {activityByMonth.map((month) => {
+                  const quizAttempts = Number(month.quiz_attempts) || 0;
+                  const submissions = Number(month.assignment_submissions) || 0;
+                  const graded = Number(month.assignments_graded) || 0;
+                  const monthLabel = new Date(
+                    `${month.month}-01T00:00:00`
+                  ).toLocaleDateString(undefined, { month: "short" });
+                  const bars = [
+                    { value: quizAttempts, color: "bg-cyan-600" },
+                    { value: submissions, color: "bg-amber-500" },
+                    { value: graded, color: "bg-emerald-600" },
+                  ];
+
+                  return (
+                    <div
+                      key={month.month}
+                      className="flex min-w-0 flex-col items-center"
+                      title={`${month.month}: ${quizAttempts} quiz attempts, ${submissions} submissions, ${graded} graded`}
+                    >
+                      <div className="flex h-28 w-full items-end justify-center gap-0.5 border-b border-slate-200 sm:h-32 sm:gap-1">
+                        {bars.map((bar, index) => (
+                          <span
+                            key={index}
+                            aria-hidden="true"
+                            className={`w-[28%] rounded-t ${bar.color}`}
+                            style={{
+                              height: `${Math.max(
+                                bar.value ? 5 : 0,
+                                (bar.value / maxMonthlyActivity) * 100
+                              )}%`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <span className="mt-2 text-[10px] text-slate-500">
+                        {monthLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </section>
+
+        <section
+          aria-labelledby="instructor-live-classes-heading"
+          className="mb-8 rounded-xl border border-cyan-200 bg-cyan-50/60 p-5 shadow-sm sm:p-6"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="rounded-lg bg-cyan-100 p-2 text-cyan-800">
+                <Video className="h-5 w-5" />
+              </span>
+              <div>
+                <h2
+                  id="instructor-live-classes-heading"
+                  className="font-bold text-slate-900"
+                >
+                  Live teaching
+                </h2>
+                <p className="text-sm text-slate-600">
+                  Start a session or manage your class schedule.
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/live-classes"
+              className="inline-flex items-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-800"
+            >
+              <CalendarDays className="h-4 w-4" />
+              Schedule a class
+            </Link>
+          </div>
+          {liveClassActionError && (
+            <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              {liveClassActionError}
+            </p>
+          )}
+          {instructorLiveClasses.length === 0 ? (
+            <p className="mt-5 rounded-lg border border-dashed border-cyan-200 bg-white/70 p-4 text-sm text-slate-600">
+              No upcoming or active classes. Schedule one to meet your students live.
+            </p>
+          ) : (
+            <ul className="mt-5 space-y-3">
+              {instructorLiveClasses.map((liveClass) => (
+                <li
+                  key={liveClass.id}
+                  className="flex flex-col gap-3 rounded-lg border border-cyan-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold text-slate-900">
+                        {liveClass.title}
+                      </h3>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          liveClass.status === "live"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-cyan-100 text-cyan-800"
+                        }`}
+                      >
+                        {liveClass.status === "live" ? "Live now" : "Scheduled"}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-sm text-slate-600">
+                      {liveClass.course_title} · {new Date(liveClass.scheduled_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void openLiveClass(liveClass)}
+                    disabled={startingLiveClassId !== null}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <Video className="h-4 w-4" />
+                    {startingLiveClassId === String(liveClass.id)
+                      ? "Opening..."
+                      : liveClass.status === "live"
+                        ? "Open class"
+                        : "Start class"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         {/* Main Content */}
         <div className="grid gap-8 lg:grid-cols-3">
@@ -642,6 +877,41 @@ export default function InstructorDashboardEnhanced() {
         </footer>
         </main>
       </div>
+      {showCourseVideoModal && (
+        <div
+          className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-slate-950/60 p-3 sm:p-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowCourseVideoModal(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="course-video-dialog-title"
+            className="my-auto w-full max-w-6xl"
+          >
+            <div className="mb-2 flex items-center justify-between rounded-lg bg-white px-4 py-3 shadow-lg">
+              <h2
+                id="course-video-dialog-title"
+                className="font-semibold text-slate-900"
+              >
+                Course video recordings
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowCourseVideoModal(false)}
+                aria-label="Close course video recordings"
+                className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <CourseVideoRecorder courses={courses} />
+          </section>
+        </div>
+      )}
     </div>
   );
 }

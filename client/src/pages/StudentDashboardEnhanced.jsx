@@ -445,6 +445,13 @@ export default function StudentDashboardEnhanced() {
                       <GraduationCap className="h-4 w-4" />
                       Browse courses
                     </Link>
+                    <Link
+                      to="/live-classes"
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10"
+                    >
+                      <CalendarClock className="h-4 w-4" />
+                      Live classes
+                    </Link>
                   </div>
                 </div>
                 <div className="min-w-36 rounded-2xl border border-white/20 bg-white/10 p-4 text-center backdrop-blur">
@@ -483,6 +490,72 @@ export default function StudentDashboardEnhanced() {
                 icon={FileText}
                 color="bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
               />
+            </section>
+
+            <section
+              aria-labelledby="course-completion-heading"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6"
+            >
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
+                    Progress snapshot
+                  </p>
+                  <h2
+                    id="course-completion-heading"
+                    className="mt-1 text-lg font-bold text-slate-900 dark:text-white"
+                  >
+                    Course completion
+                  </h2>
+                </div>
+                <Link
+                  to="/my-learning"
+                  className="text-sm font-semibold text-indigo-700 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200"
+                >
+                  All courses
+                </Link>
+              </div>
+              {courseProgress.length === 0 ? (
+                <p className="mt-5 text-sm text-slate-500 dark:text-slate-400">
+                  Enroll in a course to see your progress here.
+                </p>
+              ) : (
+                <div className="mt-5 space-y-4">
+                  {[...courseProgress]
+                    .sort(
+                      (first, second) =>
+                        (Number(second.completion_percentage) || 0) -
+                        (Number(first.completion_percentage) || 0)
+                    )
+                    .slice(0, 6)
+                    .map((course) => {
+                      const completion = Math.max(
+                        0,
+                        Math.min(100, Number(course.completion_percentage) || 0)
+                      );
+                      return (
+                        <div key={course.course_id} className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-x-3 gap-y-1.5 sm:grid-cols-[minmax(8rem,1fr)_minmax(8rem,2fr)_3rem]">
+                          <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                            {course.title}
+                          </span>
+                          <div
+                            role="img"
+                            aria-label={`${course.title}: ${completion}% complete`}
+                            className="col-span-2 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 sm:col-span-1"
+                          >
+                            <div
+                              className="h-full rounded-full bg-indigo-600 transition-[width]"
+                              style={{ width: `${completion}%` }}
+                            />
+                          </div>
+                          <span className="row-start-1 text-right text-sm font-semibold tabular-nums text-indigo-700 dark:text-indigo-300 sm:col-start-3">
+                            {completion}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </section>
 
             <section>
