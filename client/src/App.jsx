@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
 
 import Login from "./pages/Login";
@@ -31,6 +31,7 @@ import ProtectedRoute, {
   PageLoader,
   RoleRoute,
 } from "./components/ProtectedRoute";
+import RoleWorkspace from "./components/RoleWorkspace";
 
 import { useAuth } from "./context/AuthContext";
 
@@ -45,6 +46,8 @@ function HomeRedirect() {
 }
 
 function NotFound() {
+  const navigate = useNavigate();
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-5 text-white">
       <div className="max-w-md text-center">
@@ -60,7 +63,7 @@ function NotFound() {
 
         <button
           type="button"
-          onClick={() => window.location.assign("/")}
+          onClick={() => navigate("/", { replace: true })}
           className="mt-6 rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold transition hover:bg-indigo-500"
         >
           Back to Home
@@ -82,8 +85,22 @@ export default function App() {
       {/* Routes requiring authentication */}
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/student-dashboard" element={<StudentDashboard />} />
-        <Route path="/instructor-dashboard" element={<InstructorDashboard />} />
+        <Route
+          path="/student-dashboard"
+          element={
+            <RoleRoute allowedRoles={["student"]}>
+              <StudentDashboard />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/instructor-dashboard"
+          element={
+            <RoleRoute allowedRoles={["instructor", "admin"]}>
+              <InstructorDashboard />
+            </RoleRoute>
+          }
+        />
         <Route
           path="/admin-dashboard"
           element={
@@ -100,18 +117,6 @@ export default function App() {
             </RoleRoute>
           }
         />
-        <Route path="/notifications" element={<Notifications />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/certificates" element={<MyCertificates />} />
-        <Route path="/live-classes" element={<LiveClasses />} />
-        <Route
-          path="/instructor/calendar"
-          element={
-            <RoleRoute allowedRoles={["instructor"]}>
-              <InstructorCalendar />
-            </RoleRoute>
-          }
-        />
         <Route
           path="/live-classes/:classId/room"
           element={
@@ -121,55 +126,63 @@ export default function App() {
           }
         />
 
-        {/* Courses and learning */}
-        <Route path="/courses" element={<Courses />} />
-        <Route path="/courses/:courseId/detail" element={<CourseDetail />} />
-        <Route
-          path="/courses/category/:categoryName"
-          element={<CategoryPage />}
-        />
-        <Route path="/courses/:courseId/learn" element={<CourseContent />} />
+        <Route element={<RoleWorkspace />}>
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/certificates" element={<MyCertificates />} />
+          <Route path="/live-classes" element={<LiveClasses />} />
+          <Route
+            path="/instructor/calendar"
+            element={
+              <RoleRoute allowedRoles={["instructor"]}>
+                <InstructorCalendar />
+              </RoleRoute>
+            }
+          />
 
-        <Route path="/my-learning" element={<MyLearning />} />
-        <Route
-          path="/my-assessments"
-          element={
-            <RoleRoute allowedRoles={["student"]}>
-              <StudentAssessments />
-            </RoleRoute>
-          }
-        />
-
-        <Route
-          path="/courses/:courseId/enrollments"
-          element={<CourseEnrollments />}
-        />
-
-        {/* Quizzes */}
-        <Route path="/quizzes/:quizId/take" element={<QuizTake />} />
-
-        <Route
-          path="/courses/:courseId/quizzes/manage"
-          element={
-            <RoleRoute allowedRoles={["instructor", "admin"]}>
-              <QuizManagement />
-            </RoleRoute>
-          }
-        />
-        <Route
-          path="/instructor/quizzes/grading"
-          element={
-            <RoleRoute allowedRoles={["instructor", "admin"]}>
-              <QuizGrading />
-            </RoleRoute>
-          }
-        />
-
-        {/* Assignments */}
-        <Route
-          path="/courses/:courseId/assignments"
-          element={<CourseAssignments />}
-        />
+          {/* Courses and learning */}
+          <Route path="/courses" element={<Courses />} />
+          <Route path="/courses/:courseId/detail" element={<CourseDetail />} />
+          <Route
+            path="/courses/category/:categoryName"
+            element={<CategoryPage />}
+          />
+          <Route path="/courses/:courseId/learn" element={<CourseContent />} />
+          <Route path="/my-learning" element={<MyLearning />} />
+          <Route
+            path="/my-assessments"
+            element={
+              <RoleRoute allowedRoles={["student"]}>
+                <StudentAssessments />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/courses/:courseId/enrollments"
+            element={<CourseEnrollments />}
+          />
+          <Route
+            path="/courses/:courseId/quizzes/manage"
+            element={
+              <RoleRoute allowedRoles={["instructor", "admin"]}>
+                <QuizManagement />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/instructor/quizzes/grading"
+            element={
+              <RoleRoute allowedRoles={["instructor", "admin"]}>
+                <QuizGrading />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/courses/:courseId/assignments"
+            element={<CourseAssignments />}
+          />
+          <Route path="/quizzes/:quizId/take" element={<QuizTake />} />
+        </Route>
 
         {/* Legacy role-based routes (now redirect to proper dashboards) */}
         <Route

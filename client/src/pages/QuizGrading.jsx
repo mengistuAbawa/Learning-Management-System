@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
-import DashboardSidebar from "../components/DashboardSidebar";
 import api from "../services/api";
 
 export default function QuizGrading() {
@@ -85,9 +84,8 @@ export default function QuizGrading() {
 
   return (
     <div className="min-h-screen bg-[#f3f6f4] px-4 py-5 text-slate-800 sm:px-6">
-      <div className="mx-auto flex max-w-7xl flex-col gap-5 lg:flex-row lg:items-start">
-        <DashboardSidebar role="instructor" />
-        <main className="min-w-0 flex-1">
+      <div className="mx-auto max-w-7xl">
+        <main>
           <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wider text-cyan-700">

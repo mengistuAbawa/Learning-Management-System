@@ -11,7 +11,6 @@ import {
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
-import DashboardSidebar from "../components/DashboardSidebar";
 import { useAuth } from "../context/AuthContext";
 import { getAssignments, getMyAssignmentSubmissions } from "../services/assignmentService";
 import { getMyEnrollments } from "../services/enrollmentService";
@@ -217,9 +216,8 @@ export default function StudentAssessments() {
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 lg:flex-row lg:items-start">
-        <DashboardSidebar role="student" />
-        <main className="min-w-0 flex-1 space-y-8">
+      <div className="mx-auto max-w-7xl">
+        <main className="space-y-8">
           <header className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <Link to="/student-dashboard" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-700">
