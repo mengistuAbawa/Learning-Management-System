@@ -22,6 +22,7 @@ const adminUserRoutes = require("./routes/adminUserRoutes");
 const adminPlatformRoutes = require("./routes/adminPlatformRoutes");
 const adminDashboardRoutes = require("./routes/adminDashboardRoutes");
 const courseVideoRoutes = require("./routes/courseVideoRoutes");
+const courseMaterialRoutes = require("./routes/courseMaterialRoutes");
 
 const app = express();
 
@@ -84,6 +85,7 @@ app.get("/api/health", async (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/course-videos", courseVideoRoutes);
+app.use("/api/course-materials", courseMaterialRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api", moduleRoutes);

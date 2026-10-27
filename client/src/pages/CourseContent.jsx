@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Clock,
   Clock3,
+  Download,
   Edit3,
   FileText,
   Film,
@@ -336,6 +337,11 @@ export default function CourseContent() {
   const [expanded, setExpanded] = useState({});
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [courseVideos, setCourseVideos] = useState([]);
+  const [lessonMaterials, setLessonMaterials] = useState([]);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialsError, setMaterialsError] = useState("");
+  const [downloadingMaterialId, setDownloadingMaterialId] = useState(null);
+  const materialsRequestRef = useRef(0);
   const [liveClasses, setLiveClasses] = useState([]);
   const [liveClassError, setLiveClassError] = useState("");
   const [quizzes, setQuizzes] = useState([]);
@@ -540,18 +546,64 @@ export default function CourseContent() {
   }
 
   async function openLesson(lesson) {
+    const requestId = ++materialsRequestRef.current;
     setError("");
     setNotice("");
     setLessonPlaybackUrl("");
     setVideoPlaybackError("");
     setVideoProgressMessage("");
+    setLessonMaterials([]);
+    setMaterialsError("");
+    setMaterialsLoading(true);
 
     try {
       const result = await getLessonById(lesson.id);
       setSelectedLesson(result.lesson);
+      try {
+        const materialResult = await api.get(
+          `/course-materials/lessons/${lesson.id}`
+        );
+        if (requestId === materialsRequestRef.current) {
+          setLessonMaterials(materialResult.data.materials || []);
+        }
+      } catch (materialsLoadError) {
+        if (requestId === materialsRequestRef.current) {
+          setMaterialsError(errorText(materialsLoadError));
+        }
+      } finally {
+        if (requestId === materialsRequestRef.current) {
+          setMaterialsLoading(false);
+        }
+      }
     } catch (lessonError) {
       setSelectedLesson(null);
       setError(errorText(lessonError));
+      if (requestId === materialsRequestRef.current) {
+        setMaterialsLoading(false);
+      }
+    }
+  }
+
+  async function downloadMaterial(material) {
+    setMaterialsError("");
+    setDownloadingMaterialId(String(material.id));
+    try {
+      const response = await api.get(
+        `/course-materials/${material.id}/download`,
+        { responseType: "blob" }
+      );
+      const objectUrl = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = material.original_filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (downloadError) {
+      setMaterialsError(errorText(downloadError));
+    } finally {
+      setDownloadingMaterialId(null);
     }
   }
 
@@ -1226,6 +1278,73 @@ export default function CourseContent() {
                       <span className="font-semibold">Open lesson resource</span>
                       <ChevronRight className="ml-auto h-4 w-4 text-slate-500" />
                     </a>
+                  )}
+
+                  {(lessonMaterials.length > 0 ||
+                    materialsLoading ||
+                    materialsError ||
+                    canManageCourse) && (
+                    <section className="mt-5 rounded-xl border border-white/10 bg-slate-950 p-4">
+                      <h4 className="font-semibold text-white">Lesson materials</h4>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Documents shared for this lesson.
+                      </p>
+                      {materialsError && (
+                        <p role="alert" className="mt-3 text-sm text-rose-300">
+                          {materialsError}
+                        </p>
+                      )}
+                      {materialsLoading ? (
+                        <p className="mt-3 text-sm text-slate-400">
+                          Loading materials…
+                        </p>
+                      ) : lessonMaterials.length > 0 ? (
+                        <ul className="mt-3 space-y-2">
+                          {lessonMaterials.map((material) => (
+                            <li
+                              key={material.id}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 p-3"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-white">
+                                  {material.title}
+                                </p>
+                                <p className="mt-1 truncate text-xs text-slate-400">
+                                  {material.original_filename} ·{" "}
+                                  {Math.max(
+                                    1,
+                                    Math.round(Number(material.file_size) / 1024)
+                                  )}{" "}
+                                  KB
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {material.status === "draft" && canManageCourse && (
+                                  <span className="rounded-full bg-amber-400/10 px-2 py-1 text-xs font-semibold text-amber-200">
+                                    Draft
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => void downloadMaterial(material)}
+                                  disabled={downloadingMaterialId === String(material.id)}
+                                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                                >
+                                  <Download className="h-4 w-4" aria-hidden="true" />
+                                  {downloadingMaterialId === String(material.id)
+                                    ? "Preparing…"
+                                    : "Download"}
+                                </button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : !materialsError ? (
+                        <p className="mt-3 text-sm text-slate-400">
+                          No documents have been sent for this lesson yet.
+                        </p>
+                      ) : null}
+                    </section>
                   )}
 
                   <div className="mt-5 whitespace-pre-wrap break-words text-sm leading-7 text-slate-300">

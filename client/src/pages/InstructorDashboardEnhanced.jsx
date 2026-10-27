@@ -15,6 +15,7 @@ import {
   PlusCircle,
   Menu,
   CalendarDays,
+  FileText,
   GraduationCap,
   Video,
   X,
@@ -24,6 +25,7 @@ import { useAuth } from "../context/AuthContext";
 import { getAnalyticsOverview } from "../services/analyticsService";
 import api from "../services/api";
 import CourseVideoRecorder from "../components/CourseVideoRecorder";
+import CourseMaterialManager from "../components/CourseMaterialManager";
 import DashboardSidebar from "../components/DashboardSidebar";
 import DashboardThemeToggle from "../components/DashboardThemeToggle";
 import NotificationBell from "../components/NotificationBell";
@@ -39,6 +41,7 @@ export default function InstructorDashboardEnhanced() {
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [showStudentCoursePicker, setShowStudentCoursePicker] = useState(false);
   const [showCourseVideoModal, setShowCourseVideoModal] = useState(false);
+  const [showCourseMaterialModal, setShowCourseMaterialModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [quickActionError, setQuickActionError] = useState("");
@@ -383,6 +386,14 @@ export default function InstructorDashboardEnhanced() {
             >
               <Video className="h-4 w-4" />
               Course video recordings
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCourseMaterialModal(true)}
+              className="mt-4 ml-2 inline-flex items-center gap-2 rounded-lg border border-white/40 bg-white px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50 transition"
+            >
+              <FileText className="h-4 w-4" />
+              Upload course materials
             </button>
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -909,6 +920,41 @@ export default function InstructorDashboardEnhanced() {
               </button>
             </div>
             <CourseVideoRecorder courses={courses} />
+          </section>
+        </div>
+      )}
+      {showCourseMaterialModal && (
+        <div
+          className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-slate-950/60 p-3 sm:p-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowCourseMaterialModal(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="course-material-dialog-title"
+            className="my-auto w-full max-w-4xl"
+          >
+            <div className="mb-2 flex items-center justify-between rounded-lg bg-white px-4 py-3 shadow-lg">
+              <h2
+                id="course-material-dialog-title"
+                className="font-semibold text-slate-900"
+              >
+                Upload course materials
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowCourseMaterialModal(false)}
+                aria-label="Close course materials"
+                className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <CourseMaterialManager courses={courses} />
           </section>
         </div>
       )}
